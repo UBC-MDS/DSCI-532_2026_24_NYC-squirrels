@@ -12,12 +12,14 @@ Central Park is home to a diverse population of eastern gray squirrels, yet unde
 
 We will be visualizing the 2018 Central Park Squirrel Census dataset, which contains 3,023 squirrel sightings. Each observation is described by 31 variables that capture physical characteristics, location, and behavior. These variables include:
 
-* **Spatial and Temporal Data:** Geographic coordinates (`X`, `Y`, `Lat/Long`), `Hectare` identifiers, and the `Date` and `Shift` (AM/PM) of the sighting.
+* **Spatial and Temporal Data:** Geographic coordinates (`X`, `Y`, `Lat/Long`), `Hectare` identifiers, and the `Date` and `Shift` (AM/PM) all have 3,023 non-null entries (100% complete). These are essential for mapping squirrel hotspots.
 
-* **Physical Characteristics:** Details on `Age` and fur coloration, including `Primary Fur Color`, `Highlight Fur Color`, etc.
+* **Physical Characteristics:** `Primary Fur Color` (2,968 non-null) and `Age` (2,902 non-null) are largely complete, while `Highlight Fur Color` (1,937 non-null) provides additional detail for specific identifying markers..
 
-* **Behavioral Indicators:** Boolean flags for activities such as `Running`, `Chasing`, `Climbing`, `Eating`, and `Foraging`.
+* **Behavioral Indicators:** Core behaviors such as `Running`, `Chasing`, `Climbing`, `Eating`, and `Foraging` are captured for all 3,023 sightings as boolean flags.
 
-* **Communication and Human Interaction:** Recorded vocalizations (`Kuks`, `Quaas`, `Moans`), tail movements (`Tail flags`, `Tail twitches`), and social interactions with humans (`Approaches`, `Indifferent`, `Runs from`).
+* **Communication and Human Interaction:** Vocalizations (`Kuks`, `Quaas`, `Moans`) and interaction indicators (`Approaches`, `Indifferent`, `Runs from`) also have 3,023 non-null entries.
+
+* **Sparse/Qualitative Data:** Some fields like `Specific Location` (476 non-null) and `Other Activities` (437 non-null) have fewer entries but offer valuable qualitative descriptions for deeper exploration.
 
 Using this data, we will derive new insights, such as behavioral density maps and interaction profiles, to help users understand how squirrel activity varies across different regions of Central Park. 
