@@ -20,4 +20,4 @@ We will be visualizing the 2018 Central Park Squirrel Census dataset, which cont
 
 * **Communication and Human Interaction:** Recorded vocalizations (`Kuks`, `Quaas`, `Moans`), tail movements (`Tail flags`, `Tail twitches`), and social interactions with humans (`Approaches`, `Indifferent`, `Runs from`).
 
-Using this data, we will derive new insights, such as behavioral density maps and interaction profiles, to help users understand how squirrel activity varies across different regions of Central Park.
+Using this data, we will derive new insights, such as behavioral density maps and interaction profiles, to help users understand how squirrel activity varies across different regions of Central Park. 
