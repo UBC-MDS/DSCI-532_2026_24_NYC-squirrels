@@ -8,3 +8,5 @@ dependencies:
   - vegafusion=1.6.9
   - vl-convert-python=1.9.0
   - jupyterlab=4.2.5
+  - shiny=1.2.1
+  - shinywidgets
