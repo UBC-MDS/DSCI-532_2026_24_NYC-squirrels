@@ -1,0 +1,7 @@
+pandas==2.2.2
+altair==5.3.0
+vegafusion==1.6.9
+vl-convert-python==1.9.0
+jupyterlab==4.2.5
+shiny==1.2.1
+shinywidgets==0.3.4
