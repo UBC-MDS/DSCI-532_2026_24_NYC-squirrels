@@ -50,5 +50,39 @@ A bar chart comparing flee rates across fur colour groups. Black squirrels flee 
 
 These visualizations confirm that the dataset contains meaningful spatial and behavioral patterns that an interactive dashboard can help users explore and act on.
 
-Section 5: App Sketch & Description
-...
+### Section 5: App Sketch & Description
+
+![Sketch](../img/sketch.png)
+
+The dashboard combines spatial mapping and behavioural summaries to help users explore squirrel sightings in Central Park. The interface includes a global filter bar, a full-park map, a zoomed zone view, a count display, and three behaviour-focused bar charts.
+
+**Global Filters (Top Control Panel)**
+* includes three filters: Location (single select), Age (multi-select), and Time of Day (AM/PM) (multi-select)
+* visual components update dynamically to reflect selected criteria
+
+**Main Map Panel (Full Park View)**
+* map of Central Park displaying all filtered squirrel sightings as points
+* points coloured by primary fur colour
+* enables users to identify density patterns around the park
+
+**Zoomed Zone View**
+* secondary map displaying a zoomed-in view of different park zones
+* provides better resolution for more local density patterns
+* updates dynamically with the location filter
+
+**Sighting Count Display**
+* summary box displaying the number of squirrel sightings currently selected
+* provides immediate quantitative context
+* updates dynamically based on selected filters
+
+**Movement Chart**
+* bar chart that summarises movement-related behaviors, including running, chasing, climbing, eating, and foraging
+* bars represent the frequency of each behaviour within the selected subset
+
+**Vocalisation Chart**
+* bar chart summarising squirrel vocalisations (kuks, quaas, and moans)
+* displays the frequency of each vocalisation within the selected subset
+
+**Human Interaction Chart**
+* bar chart displaying the frequency of human interaction behaviours (approaches, indifferent, and runs from)
+* displays the frequency of each human interaction behaviour within the selected subset
