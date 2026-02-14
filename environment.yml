@@ -9,4 +9,4 @@ dependencies:
   - vl-convert-python=1.9.0
   - jupyterlab=4.2.5
   - shiny=1.2.1
-  - shinywidgets
+  - shinywidgets=0.3.4
