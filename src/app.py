@@ -5,7 +5,7 @@ import altair as alt
 import pandas as pd
 from shiny import App, reactive, render, ui
 
-DATA_PATH = Path("data/processed/squirrels.csv") # TODO: update when processed dataset is finalized
+DATA_PATH = Path("data/processed/squirrels.csv") # Semi-processed data TODO - full clean
 
 FUR_COLOURS = ['#808080', '#A66A3F', '#000000']
 FUR_ORDER = ['Gray', 'Cinnamon', 'Black']
@@ -13,13 +13,26 @@ FUR_ORDER = ['Gray', 'Cinnamon', 'Black']
 SHIFT_COLOURS = ['#D9C27A', '#5B87D9']
 SHIFT_ORDER = ['AM', 'PM']
 
+BEHAVIOUR_COLS = ['running', 'chasing', 'climbing', 'eating', 'foraging',
+                  'kuks', 'quaas', 'moans', 'tail_flags', 'tail_twitches']
+BEHAVIOUR_COLOUR = '#6A9E6F'
+
 def load_squirrel_data(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path)
 
-    if "shift" in df.columns:
-        df["shift"] = df["shift"].astype("string")
-    if "primary_fur_color" in df.columns:
-        df["primary_fur_color"] = df["primary_fur_color"].astype("string")
+    df['date'] = pd.to_datetime(df['date'])
+
+    df['hectare_squirrel_number'] = df['hectare_squirrel_number'].astype('Int64')
+
+    for col in ['unique_squirrel_id', 'hectare', 'shift', 'age', 'primary_fur_color', 
+                'highlight_fur_color', 'combination_of_primary_and_highlight_color', 'color_notes', 
+                'location', 'specific_location', 'other_activities', 'other_interactions', 'lat/long']:
+        if col in df.columns:
+            df[col] = df[col].astype('string')
+
+    for col in ['x', 'y']:
+        if col in df.columns:
+            df[col] = df[col].astype('float64')
 
     return df
 
@@ -32,6 +45,7 @@ def chart_html(chart: alt.Chart, element_id: str) -> ui.Tag:
         ),
     )
 
+# ---- UI ----
 app_ui = ui.page_fluid(
     ui.tags.head(
         ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega@5"),
@@ -68,10 +82,25 @@ app_ui = ui.page_fluid(
                 ui.card_header("Shift Counts"),
                 ui.output_ui("shift_hist"),
             ),
+            ui.card(
+                ui.card_header("Top 5 Behaviours"),
+                ui.output_ui("behaviour_hist"),
+            ),
         ),
-    ),
+    ), 
+        ui.hr(),
+        ui.row(
+            ui.column(12,
+                ui.card(
+                    ui.card_header("Squirrel Sightings Table"),
+                    ui.output_data_frame("filtered_table"),
+                )
+            )
+        ),
 )
 
+
+# ---- Server ----
 def server(input, output, session):
     raw_df = reactive.Value(pd.DataFrame())
 
@@ -80,10 +109,14 @@ def server(input, output, session):
         if not DATA_PATH.exists():
             raw_df.set(pd.DataFrame())
             return
-        raw_df.set(load_squirrel_data(DATA_PATH))
+        df = load_squirrel_data(DATA_PATH)
+        print(df.columns.tolist())
+        print(df.shape)
+        print(df.head(2))
+        raw_df.set(df)
 
-    @reactive.calc
-    def plot_df() -> pd.DataFrame:
+    @reactive.calc # TODO - update when include filters
+    def filtered_df() -> pd.DataFrame:
         df = raw_df.get()
         if df.empty:
             return df
@@ -92,7 +125,7 @@ def server(input, output, session):
     @output
     @render.ui
     def fur_color_hist():
-        df = plot_df()
+        df = filtered_df()
         if df.empty or "primary_fur_color" not in df.columns:
             return ui.em("No data.")
 
@@ -116,7 +149,7 @@ def server(input, output, session):
     @output
     @render.ui
     def shift_hist():
-        df = plot_df()
+        df = filtered_df()
         if df.empty or "shift" not in df.columns:
             return ui.em("No data.")
 
@@ -136,5 +169,49 @@ def server(input, output, session):
         )
 
         return chart_html(chart, element_id="shift_hist_chart")
+
+    @output
+    @render.ui
+    def behaviour_hist():
+        df = filtered_df()
+        if df.empty:
+            return ui.em("No data.")
+
+        # Find which behaviour columns actually exist in the dataframe
+        cols = [c for c in BEHAVIOUR_COLS if c in df.columns]
+        if not cols:
+            return ui.em("No behaviour data.")
+
+        # Sum each boolean column and take top 5
+        counts = (
+            df[cols]
+            .apply(lambda s: s.eq(True).sum())
+            .reset_index()
+        )
+        counts.columns = ['behaviour', 'count']
+        counts = counts.nlargest(5, 'count')
+        counts['behaviour'] = counts['behaviour'].str.replace('_', ' ').str.title()
+
+        chart = (
+            alt.Chart(counts)
+            .mark_bar()
+            .encode(
+                x=alt.X("count:Q", title="Sightings"),
+                y=alt.Y("behaviour:N", title="Behaviour", sort="-x"),
+                color=alt.value(BEHAVIOUR_COLOUR),
+            )
+            .properties(height=220, width=380)
+        )
+
+        return chart_html(chart, element_id="behaviour_hist_chart")
+
+    @output
+    @render.data_frame
+    def filtered_table():
+        df = filtered_df()
+        if df.empty:
+            return render.DataGrid(pd.DataFrame())
+        cols = [c for c in ['unique_squirrel_id', 'date', 'shift', 'age', 'primary_fur_color', 'hectare', 'longitude', 'latitude'] if c in df.columns]
+        return render.DataGrid(df[cols], height = '280px')
 
 app = App(app_ui, server)
