@@ -23,20 +23,23 @@
 | `fur_color_hist` | Output       | `@render.ui`           | `filtered_df`                | #3         |
 | `shift_hist` | Output       | `@render.ui`           | `filtered_df`                | #3         |
 | `filtered_table`| Output       | `@render.data_frame`     | `filtered_df`                | #1, #2, #3         |
-
+| `map`| Output       | `@render.ui`     | `filtered_df`, `geojson_file`, `basemap`, `cluster_points`               | #1, #2, #3         |
 ### Reactivity Diagram
 ```mermaid
 flowchart TD
-  A[/Age/] --> F{{filtered_df}}
-  B[/Time/] --> F
-  C[/Location/] --> F
-  D[/Behavior/] --> F
-  F --> P1([map])
-  F --> P2([plot_fur_color])
-  F --> P3([plot_location])
-  F --> P4([plot_behavior])
-  F --> (count_squirrels)
-  F --> tbl1[filtered_table]
+  shift[/shift/] --> F{{filtered_df}}
+  primary_fur_color[/primary_fur_color/] --> F
+  age[/age/] --> F
+  behavior_any[/behavior_any/] --> F
+  geojson_file[/geojson_file/] --> map
+  basemap[/basemap/] --> map
+  cluster_points[/cluster_points/] --> map
+  F --> map([map])
+  F --> unique_squirrel_count_text([unique_squirrel_count_text])
+  F --> date_range_text([date_range_text])
+  F --> fur_color_hist([fur_color_hist])
+  F --> shift_hist([shift_hist])
+  F --> filtered_table[filtered_table]
 ```
 
 ### Calculation Details
