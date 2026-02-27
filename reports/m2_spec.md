@@ -43,3 +43,9 @@ flowchart TD
 ```
 
 ### Calculation Details
+
+**`filtered_df`**
+
+- **Depends on:** `shift`, `primary_fur_color`, `age`, `behavior_any`
+- **Transformation:** Takes the raw squirrel dataframe and applies up to four sequential row filters. First, it keeps only rows where the `shift` column matches the selected shift values (AM/PM). Then it filters by selected `primary_fur_color` values. Then by selected `age` values. Finally, if any behaviors are selected, it keeps only rows where at least one of the chosen behavior columns is truthy (i.e., a `True`-like value) — this is an OR across all selected behaviors. Each filter is only applied if the corresponding input is non-empty.
+- **Consumed by:** `unique_squirrel_count_text`, `date_range_text`, `fur_color_hist`, `shift_hist`, `filtered_table`, and `map`
