@@ -10,3 +10,10 @@ conda env create -f environment.yml
 conda activate squirrels
 shiny run src/app.py
 ```
+
+## Deployed App
+
+The app is deployed on Posit Connect Cloud at the links below.
+
+- Stable build (main): <https://elsereneee-nycsquirrelmap.share.connect.posit.cloud>
+- Preview build (dev): <https://elsereneee-nycsquirrels-preview.share.connect.posit.cloud>
