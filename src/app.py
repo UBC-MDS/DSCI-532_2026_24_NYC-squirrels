@@ -5,14 +5,13 @@ import altair as alt
 import pandas as pd
 from shiny import App, reactive, render, ui
 
-DATA_PATH = Path("data/processed/squirrels.csv")
+DATA_PATH = Path("data/processed/squirrels.csv") # TODO: update when processed dataset is finalized
 
 FUR_COLOURS = ['#808080', '#A66A3F', '#000000']
 FUR_ORDER = ['Gray', 'Cinnamon', 'Black']
 
 SHIFT_COLOURS = ['#D9C27A', '#5B87D9']
 SHIFT_ORDER = ['AM', 'PM']
-
 
 def load_squirrel_data(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path)
@@ -23,7 +22,6 @@ def load_squirrel_data(path: Path) -> pd.DataFrame:
         df["primary_fur_color"] = df["primary_fur_color"].astype("string")
 
     return df
-
 
 def chart_html(chart: alt.Chart, element_id: str) -> ui.Tag:
     spec = chart.to_dict()
@@ -62,14 +60,81 @@ app_ui = ui.page_fluid(
         ),
         # Right – bar charts
         ui.column(5,
-            ui.card(ui.card_header("Movements"), ui.div(style="height:180px;")),
-            ui.card(ui.card_header("Sounds"), ui.div(style="height:180px;")),
-            ui.card(ui.card_header("Human Interactions"), ui.div(style="height:180px;")),
+            ui.card(
+                ui.card_header("Fur Color Counts"),
+                ui.output_ui("fur_color_hist"),
+            ),
+            ui.card(
+                ui.card_header("Shift Counts"),
+                ui.output_ui("shift_hist"),
+            ),
         ),
     ),
 )
 
 def server(input, output, session):
-    pass
+    raw_df = reactive.Value(pd.DataFrame())
+
+    @reactive.effect
+    def _load_once():
+        if not DATA_PATH.exists():
+            raw_df.set(pd.DataFrame())
+            return
+        raw_df.set(load_squirrel_data(DATA_PATH))
+
+    @reactive.calc
+    def plot_df() -> pd.DataFrame:
+        df = raw_df.get()
+        if df.empty:
+            return df
+        return df
+
+    @output
+    @render.ui
+    def fur_color_hist():
+        df = plot_df()
+        if df.empty or "primary_fur_color" not in df.columns:
+            return ui.em("No data.")
+
+        chart = (
+            alt.Chart(df)
+            .mark_bar()
+            .encode(
+                x=alt.X("primary_fur_color:N", title="Fur color", sort=FUR_ORDER),
+                y=alt.Y("count():Q", title="Sightings"),
+                color=alt.Color(
+                    "primary_fur_color:N",
+                    scale=alt.Scale(domain=FUR_ORDER, range=FUR_COLOURS),
+                    legend=None,
+                ),
+            )
+            .properties(height=220, width=380)
+        )
+
+        return chart_html(chart, element_id="fur_color_hist_chart")
+
+    @output
+    @render.ui
+    def shift_hist():
+        df = plot_df()
+        if df.empty or "shift" not in df.columns:
+            return ui.em("No data.")
+
+        chart = (
+            alt.Chart(df)
+            .mark_bar()
+            .encode(
+                x=alt.X("shift:N", title="Shift", sort=SHIFT_ORDER),
+                y=alt.Y("count():Q", title="Sightings"),
+                color=alt.Color(
+                    "shift:N",
+                    scale=alt.Scale(domain=SHIFT_ORDER, range=SHIFT_COLOURS),
+                    legend=None,
+                ),
+            )
+            .properties(height=220, width=380)
+        )
+
+        return chart_html(chart, element_id="shift_hist_chart")
 
 app = App(app_ui, server)
