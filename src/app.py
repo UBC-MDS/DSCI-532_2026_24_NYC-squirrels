@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import glob
 import html
+import json
 import math
 from pathlib import Path
 
 import folium
-import geopandas as gpd
 import pandas as pd
 from shiny import App, reactive, render, ui
 from shinywidgets import output_widget, render_widget
@@ -40,8 +40,25 @@ def to_bool(series: pd.Series) -> pd.Series:
     return normalized.isin({"true", "t", "1", "yes"}).fillna(False)
 
 
-def load_geojson(path: str) -> gpd.GeoDataFrame:
-    gdf = gpd.read_file(path)
+def load_geojson(path: str) -> pd.DataFrame:
+    with open(path, "r", encoding="utf-8") as f:
+        raw = json.load(f)
+
+    rows = []
+    for feature in raw.get("features", []):
+        props = feature.get("properties", {}) or {}
+        geom = feature.get("geometry", {}) or {}
+        lon, lat = None, None
+        if geom.get("type") == "Point":
+            coords = geom.get("coordinates", [])
+            if isinstance(coords, list) and len(coords) >= 2:
+                lon, lat = coords[0], coords[1]
+        row = dict(props)
+        row["longitude"] = lon
+        row["latitude"] = lat
+        rows.append(row)
+
+    gdf = pd.DataFrame(rows)
     required = ["shift", "primary_fur_color", "age", "date", "hectare", "unique_squirrel_id"]
 
     for col in required:
@@ -56,9 +73,8 @@ def load_geojson(path: str) -> gpd.GeoDataFrame:
     gdf["primary_fur_color"] = gdf["primary_fur_color"].fillna("Unknown")
     gdf["age"] = gdf["age"].fillna("Unknown")
     gdf["date_clean"] = pd.to_datetime(gdf["date"].astype(str), format="%m%d%Y", errors="coerce")
-
-    if gdf.crs is not None:
-        gdf = gdf.to_crs(epsg=4326)
+    gdf["longitude"] = pd.to_numeric(gdf["longitude"], errors="coerce")
+    gdf["latitude"] = pd.to_numeric(gdf["latitude"], errors="coerce")
     return gdf
 
 
@@ -80,7 +96,7 @@ def color_for_shift(shift: str) -> str:
     return palette.get(shift, "#A0A0A0")
 
 
-def map_html(filtered: gpd.GeoDataFrame, tile_choice: str) -> str:
+def map_html(filtered: pd.DataFrame, tile_choice: str) -> str:
     fmap = folium.Map(
         location=DEFAULT_CENTER,
         zoom_start=DEFAULT_ZOOM,
@@ -89,10 +105,10 @@ def map_html(filtered: gpd.GeoDataFrame, tile_choice: str) -> str:
     )
 
     for _, row in filtered.iterrows():
-        geom = row.geometry
-        if geom is None or geom.is_empty:
+        lon = row.get("longitude")
+        lat = row.get("latitude")
+        if pd.isna(lon) or pd.isna(lat):
             continue
-        lon, lat = geom.x, geom.y
         fur = str(row.get("primary_fur_color", "Unknown"))
         popup_html = (
             f"<b>ID:</b> {html.escape(str(row.get('unique_squirrel_id', 'Unknown')))}<br/>"
@@ -116,8 +132,13 @@ def map_html(filtered: gpd.GeoDataFrame, tile_choice: str) -> str:
         marker.add_to(fmap)
 
     if not filtered.empty:
-        minx, miny, maxx, maxy = filtered.total_bounds
-        fmap.fit_bounds([[miny, minx], [maxy, maxx]])
+        coords = filtered[["longitude", "latitude"]].dropna()
+        if not coords.empty:
+            minx = coords["longitude"].min()
+            maxx = coords["longitude"].max()
+            miny = coords["latitude"].min()
+            maxy = coords["latitude"].max()
+            fmap.fit_bounds([[miny, minx], [maxy, maxx]])
 
     return fmap.get_root().render()
 
@@ -257,11 +278,11 @@ app_ui = ui.page_fluid(
 
 def server(input, output, session):
     @reactive.calc
-    def gdf() -> gpd.GeoDataFrame:
+    def gdf() -> pd.DataFrame:
         return load_geojson(DEFAULT_GEOJSON)
 
     @reactive.calc
-    def filtered() -> gpd.GeoDataFrame:
+    def filtered() -> pd.DataFrame:
         dat = gdf()
         selected_shift = input.shift() or []
         selected_fur = input.fur() or []
@@ -383,9 +404,6 @@ def server(input, output, session):
         df = filtered().copy()
         if df.empty:
             return render.DataGrid(pd.DataFrame({"message": ["No rows for current filters"]}))
-
-        df["longitude"] = df.geometry.x
-        df["latitude"] = df.geometry.y
         cols = [
             "unique_squirrel_id",
             "date_clean",
