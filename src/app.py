@@ -52,51 +52,100 @@ app_ui = ui.page_fluid(
         ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega-lite@5"),
         ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega-embed@6"),
     ),
-    # Title + filter placeholders
-    ui.row(
-        ui.column(3, ui.h2("NYC Squirrels")),
-        ui.column(3, ui.input_select("location", "Location:", ["All"])),
-        ui.column(3, ui.input_selectize("age", "Age:", ["All"], multiple=True)),
-        ui.column(3, ui.input_selectize("time", "Time:", ["All", "AM", "PM"], multiple=True)),
-    ),
-    ui.hr(),
-    # Main grid
-    ui.row(
-        # Left – maps
-        ui.column(5,
-            ui.card(ui.card_header("Full Map"), ui.div(style="height:300px;")),
-            ui.card(ui.card_header("Zoomed View"), ui.div(style="height:250px;")),
-        ),
-        # Centre – count + legend
-        ui.column(2,
-            ui.card(ui.card_header("Count of Squirrels"), ui.div(style="height:80px;")),
-            ui.card(ui.card_header("Legend"), ui.div(style="height:120px;")),
-        ),
-        # Right – bar charts
-        ui.column(5,
-            ui.card(
-                ui.card_header("Fur Color Counts"),
-                ui.output_ui("fur_color_hist"),
+    # Title
+    ui.h2('NYC Central Park Squirrel Dashboard'),
+    # Sidebar
+    ui.layout_sidebar(
+        ui.sidebar(
+            ui.input_selectize(
+                'shift',
+                'Shift',
+                choices = ['AM', 'PM'],
+                selected = ['AM', 'PM'],
+                multiple = True,
             ),
-            ui.card(
-                ui.card_header("Shift Counts"),
-                ui.output_ui("shift_hist"),
+            ui.input_selectize(
+                'primary_fur_color',
+                'Primary Fur Color',
+                choices = ['Gray', 'Cinnamon', 'Black'],
+                selected = ['Gray', 'Cinnamon', 'Black'],
+                multiple = True,
             ),
-            ui.card(
-                ui.card_header("Top 5 Behaviours"),
-                ui.output_ui("behaviour_hist"),
+            ui.input_selectize(
+                'age',
+                'Age',
+                choices = ['Juvenile', 'Adult'],
+                selected = ['Juvenile', 'Adult'],
+                multiple = True,
             ),
+            ui.input_selectize(
+                'behavior_any',
+                'Behavior',
+                choices = [],
+                selected = [],
+                multiple = True,
+            ),
+            width = 300,
         ),
-    ), 
-        ui.hr(),
-        ui.row(
-            ui.column(12,
-                ui.card(
-                    ui.card_header("Squirrel Sightings Table"),
-                    ui.output_data_frame("filtered_table"),
+        ui.div(
+            # First row - summary stats
+            ui.row(
+                # Left – squirrel count
+                ui.column(6,
+                    ui.card(
+                        ui.card_header("Unique Squirrel Count"), 
+                        ui.output_text("unique_squirrel_count_text")
+                    ),
+                ),
+                # Right – date range
+                ui.column(6,
+                    ui.card(
+                        ui.card_header("Date Range"), 
+                        ui.output_text("date_range_text")
+                    ),
+                ),
+            ),
+            # Second row - map
+            ui.row(
+                ui.column(12, 
+                    ui.card(
+                        ui.card_header("Map"), 
+                        ui.div("Map goes here", 
+                            style="height: 400px; display: flex; align-items: center; justify-content: center;"))
                 )
-            )
+            ),
+            # Third row - bar charts
+            ui.row(
+                ui.column(4,
+                    ui.card(
+                        ui.card_header("Fur Color Counts"),
+                        ui.output_ui("fur_color_hist"),
+                    ),
+                ),
+                ui.column(4,
+                    ui.card(
+                        ui.card_header("Shift Counts"),
+                        ui.output_ui("shift_hist"),
+                    ),
+                ),
+                ui.column(4,
+                    ui.card(
+                        ui.card_header("Top 5 Behaviours"),
+                        ui.output_ui("behaviour_hist"),
+                    ),
+                ),
+            ), 
+            # Fourth row - table
+            ui.row(
+                ui.column(12,
+                    ui.card(
+                        ui.card_header("Squirrel Sightings Table"),
+                        ui.output_data_frame("filtered_table"),
+                    ),
+                )
+            ),
         ),
+    ),
 )
 
 
@@ -115,12 +164,92 @@ def server(input, output, session):
         print(df.head(2))
         raw_df.set(df)
 
-    @reactive.calc # TODO - update when include filters
+    @reactive.effect
+    def _update_filter_choices():
+        df = raw_df.get()
+        if df.empty:
+            return
+
+        def _sorted_unique(col: str) -> list[str]:
+            if col not in df.columns:
+                return []
+            vals = (
+                df[col]
+                .dropna()
+                .astype("string")
+                .replace("nan", pd.NA)
+                .dropna()
+                .unique()
+                .tolist()
+            )
+            return sorted(vals)
+
+        fur_choices = _sorted_unique("primary_fur_color")
+        age_choices = _sorted_unique("age")
+
+        behaviour_cols = [
+            c
+            for c in ["running", "chasing", "climbing", "eating", "foraging", "kuks", "quaas", "moans", "approaches", "indifferent", "runs_from"]
+            if c in df.columns
+        ]
+
+        cur_fur = input.primary_fur_color() or []
+        cur_age = input.age() or []
+
+        sel_fur = [v for v in cur_fur if v in fur_choices] or fur_choices
+        sel_age = [v for v in cur_age if v in age_choices] or age_choices
+
+        ui.update_selectize("primary_fur_color", choices = fur_choices, selected = sel_fur, session = session)
+        ui.update_selectize("age", choices = age_choices, selected = sel_age, session = session)
+        ui.update_selectize("behavior_any", choices = behaviour_cols, selected = input.behavior_any() or [], session = session)
+
+    @reactive.calc
     def filtered_df() -> pd.DataFrame:
         df = raw_df.get()
         if df.empty:
             return df
-        return df
+
+        out = df.copy()
+
+        if 'shift' in out.columns and input.shift():
+            out = out[out['shift'].isin(input.shift())]
+
+        if 'primary_fur_color' in out.columns and input.primary_fur_color():
+            out = out[out['primary_fur_color'].isin(input.primary_fur_color())]
+        
+        if 'age' in out.columns and input.age():
+            out = out[out['age'].isin(input.age())]
+
+        if input.behavior_any():
+            cols = [c for c in input.behavior_any() if c in out.columns]
+            if cols:
+                mask = False
+                for c in cols:
+                    s = out[c]
+                    if s.dtype != bool:
+                        s = s.astype('string').str.lower().isin(["true", "t", "1", "yes"])
+                    mask = mask | s.fillna(False)
+            out = out[mask]
+
+        return out
+
+    @output
+    @render.text
+    def unique_squirrel_count_text():
+        df = filtered_df()
+        if df.empty or "unique_squirrel_id" not in df.columns:
+            return "0"
+        return f"{df['unique_squirrel_id'].nunique(dropna = True):,}"
+
+    @output
+    @render.text
+    def date_range_text():
+        df = filtered_df()
+        if df.empty or "date" not in df.columns:
+            return "-"
+        min_date = df["date"].min()
+        max_date = df["date"].max()
+        return f"{min_date.date()} to {max_date.date()}"
 
     @output
     @render.ui
@@ -141,7 +270,7 @@ def server(input, output, session):
                     legend=None,
                 ),
             )
-            .properties(height=220, width=380)
+            .properties(height=220, width=240)
         )
 
         return chart_html(chart, element_id="fur_color_hist_chart")
@@ -165,7 +294,7 @@ def server(input, output, session):
                     legend=None,
                 ),
             )
-            .properties(height=220, width=380)
+            .properties(height=220, width=240)
         )
 
         return chart_html(chart, element_id="shift_hist_chart")
@@ -200,7 +329,7 @@ def server(input, output, session):
                 y=alt.Y("behaviour:N", title="Behaviour", sort="-x"),
                 color=alt.value(BEHAVIOUR_COLOUR),
             )
-            .properties(height=220, width=380)
+            .properties(height=220, width=240)
         )
 
         return chart_html(chart, element_id="behaviour_hist_chart")
