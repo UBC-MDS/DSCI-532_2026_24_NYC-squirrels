@@ -1,255 +1,338 @@
-from pathlib import Path
+from __future__ import annotations
+
+import glob
+import html
 import json
+import math
+import os
+from pathlib import Path
 
 import altair as alt
+import folium
+import geopandas as gpd
 import pandas as pd
+from pyproj import datadir as pyproj_datadir
 from shiny import App, reactive, render, ui
 
-DATA_PATH = Path("data/processed/squirrels.csv") # Semi-processed data TODO - full clean
+BEHAVIOR_COLS = [
+    "running",
+    "chasing",
+    "climbing",
+    "eating",
+    "foraging"
+]
+BEHAVIOUR_COLS = BEHAVIOR_COLS
+BEHAVIOUR_COLOUR = "#6A9E6F"
 
-FUR_COLOURS = ['#808080', '#A66A3F', '#000000']
-FUR_ORDER = ['Gray', 'Cinnamon', 'Black']
+DEFAULT_CENTER = (40.78204, -73.96399)
+DEFAULT_ZOOM = 14
+FUR_COLOURS = ["#808080", "#A66A3F", "#000000"]
+FUR_ORDER = ["Gray", "Cinnamon", "Black"]
+SHIFT_COLOURS = ["#D9C27A", "#5B87D9"]
+SHIFT_ORDER = ["AM", "PM"]
 
-SHIFT_COLOURS = ['#D9C27A', '#5B87D9']
-SHIFT_ORDER = ['AM', 'PM']
+APP_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = APP_DIR.parent
+RAW_DATA_DIR = PROJECT_ROOT / "data" / "raw"
+geojson_files = sorted(glob.glob(str(RAW_DATA_DIR / "*.geojson")))
 
-BEHAVIOUR_COLS = ['running', 'chasing', 'climbing', 'eating', 'foraging',
-                  'kuks', 'quaas', 'moans', 'tail_flags', 'tail_twitches']
-BEHAVIOUR_COLOUR = '#6A9E6F'
+if not geojson_files:
+    raise RuntimeError("No .geojson file found in data/raw.")
+DEFAULT_GEOJSON = geojson_files[0]
 
-def load_squirrel_data(path: Path) -> pd.DataFrame:
-    df = pd.read_csv(path)
 
-    df['date'] = pd.to_datetime(df['date'])
+def to_bool(series: pd.Series) -> pd.Series:
+    if series.dtype == bool:
+        return series.fillna(False)
+    normalized = series.astype(str).str.strip().str.lower()
+    return normalized.isin({"true", "t", "1", "yes"}).fillna(False)
 
-    df['hectare_squirrel_number'] = df['hectare_squirrel_number'].astype('Int64')
 
-    for col in ['unique_squirrel_id', 'hectare', 'shift', 'age', 'primary_fur_color', 
-                'highlight_fur_color', 'combination_of_primary_and_highlight_color', 'color_notes', 
-                'location', 'specific_location', 'other_activities', 'other_interactions', 'lat/long']:
-        if col in df.columns:
-            df[col] = df[col].astype('string')
+def load_geojson(path: str) -> gpd.GeoDataFrame:
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix:
+        proj_dir = Path(conda_prefix) / "share" / "proj"
+        if proj_dir.exists():
+            pyproj_datadir.set_data_dir(str(proj_dir))
 
-    for col in ['x', 'y']:
-        if col in df.columns:
-            df[col] = df[col].astype('float64')
+    gdf = gpd.read_file(path, engine="fiona")
+    required = ["shift", "primary_fur_color", "age", "date", "hectare", "unique_squirrel_id"]
 
-    return df
+    for col in required:
+        if col not in gdf.columns:
+            gdf[col] = "Unknown"
+    for col in BEHAVIOR_COLS:
+        if col not in gdf.columns:
+            gdf[col] = False
+        gdf[col] = to_bool(gdf[col])
+
+    gdf["shift"] = gdf["shift"].fillna("Unknown")
+    gdf["primary_fur_color"] = gdf["primary_fur_color"].fillna("Unknown")
+    gdf["age"] = gdf["age"].fillna("Unknown")
+    gdf["date_clean"] = pd.to_datetime(gdf["date"].astype(str), format="%m%d%Y", errors="coerce")
+
+    if gdf.crs is not None:
+        gdf = gdf.to_crs(epsg=4326)
+    return gdf
+
+
+def color_for_fur(fur: str) -> str:
+    palette = {
+        "Gray": "#808080",
+        "Cinnamon": "#B87333",
+        "Black": "#1F1F1F",
+        "Unknown": "#4AA3DF",
+    }
+    return palette.get(fur, "#6E8BAA")
+
+
+def color_for_shift(shift: str) -> str:
+    palette = {
+        "AM": "#D9C27A",
+        "PM": "#5B87D9"
+    }
+    return palette.get(shift, "#A0A0A0")
+
 
 def chart_html(chart: alt.Chart, element_id: str) -> ui.Tag:
     spec = chart.to_dict()
     return ui.TagList(
         ui.tags.div(id=element_id),
-        ui.tags.script(
-            f"vegaEmbed('#{element_id}', {json.dumps(spec)}, {{actions: false}});"
-        ),
+        ui.tags.script(f"vegaEmbed('#{element_id}', {json.dumps(spec)}, {{actions: false}});"),
     )
 
-# ---- UI ----
+
+def map_html(filtered: gpd.GeoDataFrame, tile_choice: str) -> str:
+    fmap = folium.Map(
+        location=DEFAULT_CENTER,
+        zoom_start=DEFAULT_ZOOM,
+        tiles=tile_choice,
+        control_scale=True,
+    )
+
+    for _, row in filtered.iterrows():
+        geom = row.geometry
+        if geom is None or geom.is_empty:
+            continue
+        lon, lat = geom.x, geom.y
+        fur = str(row.get("primary_fur_color", "Unknown"))
+        popup_html = (
+            f"<b>ID:</b> {html.escape(str(row.get('unique_squirrel_id', 'Unknown')))}<br/>"
+            f"<b>Hectare:</b> {html.escape(str(row.get('hectare', 'Unknown')))}<br/>"
+            f"<b>Shift:</b> {html.escape(str(row.get('shift', 'Unknown')))}<br/>"
+            f"<b>Fur:</b> {html.escape(fur)}<br/>"
+            f"<b>Age:</b> {html.escape(str(row.get('age', 'Unknown')))}<br/>"
+            f"<b>Date:</b> {html.escape(str(row.get('date_clean', 'Unknown'))[:10])}"
+        )
+
+        marker = folium.CircleMarker(
+            location=(lat, lon),
+            radius=4,
+            color=color_for_fur(fur),
+            fill=True,
+            fill_color=color_for_fur(fur),
+            fill_opacity=0.8,
+            weight=0,
+            popup=folium.Popup(popup_html, max_width=250),
+        )
+        marker.add_to(fmap)
+
+    if not filtered.empty:
+        minx, miny, maxx, maxy = filtered.total_bounds
+        fmap.fit_bounds([[miny, minx], [maxy, maxx]])
+
+    return fmap.get_root().render()
+
+
+initial = load_geojson(DEFAULT_GEOJSON)
+all_shift = sorted(initial["shift"].dropna().unique().tolist())
+all_fur = sorted(initial["primary_fur_color"].dropna().unique().tolist())
+all_age = sorted(initial["age"].dropna().unique().tolist())
+
 app_ui = ui.page_fluid(
     ui.tags.head(
         ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega@5"),
         ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega-lite@5"),
         ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega-embed@6"),
     ),
-    # Title
-    ui.h2('NYC Central Park Squirrel Dashboard'),
-    # Sidebar
+    ui.tags.div(
+        {
+            "style": (
+                "position: relative; height: 170px; margin-bottom: 10px; border-radius: 10px; "
+                "overflow: hidden; background-image: "
+                "linear-gradient(to right, rgba(0,0,0,0.65), rgba(0,0,0,0.28)), "
+                "url('/img/squirrels_image.png'); "
+                "background-size: cover; background-position: center;"
+            )
+        },
+        ui.tags.div(
+            {
+                "style": (
+                    "position: absolute; left: 18px; bottom: 14px; color: #ffffff; "
+                    "text-shadow: 0 1px 4px rgba(0,0,0,0.55);"
+                )
+            },
+            ui.tags.h2("NYC Central Park Squirrel Map", style="margin: 0;"),
+            ui.tags.p(
+                ui.tags.a(
+                    "Image Source",
+                    href="https://www.centralparknyc.org/articles/getting-to-know-central-parks-squirrels",
+                    target="_blank",
+                    style="color: #e6f4ff;",
+                ),
+                " // ",
+                ui.tags.a(
+                    "Data Source",
+                    href="https://data.cityofnewyork.us/Environment/2018-Central-Park-Squirrel-Census-Squirrel-Data/vfnx-vebw",
+                    target="_blank",
+                    style="color: #e6f4ff;",
+                ),
+                style="margin: 6px 0 0 0; font-size: 0.95rem;",
+            ),
+        ),
+    ),
     ui.layout_sidebar(
         ui.sidebar(
+            ui.input_selectize("shift", "Shift", choices=all_shift, selected=all_shift, multiple=True),
             ui.input_selectize(
-                'shift',
-                'Shift',
-                choices = ['AM', 'PM'],
-                selected = ['AM', 'PM'],
-                multiple = True,
+                "fur",
+                "Primary Fur Color",
+                choices=all_fur,
+                selected=all_fur,
+                multiple=True,
+            ),
+            ui.input_selectize("age", "Age", choices=all_age, selected=all_age, multiple=True),
+            ui.input_select(
+                "basemap",
+                "Basemap",
+                choices=["OpenStreetMap", "CartoDB positron", "CartoDB dark_matter"],
+                selected="OpenStreetMap",
             ),
             ui.input_selectize(
-                'primary_fur_color',
-                'Primary Fur Color',
-                choices = ['Gray', 'Cinnamon', 'Black'],
-                selected = ['Gray', 'Cinnamon', 'Black'],
-                multiple = True,
+                "behavior_any",
+                "Behavior",
+                choices=[],
+                selected=[],
+                multiple=True,
             ),
-            ui.input_selectize(
-                'age',
-                'Age',
-                choices = ['Juvenile', 'Adult'],
-                selected = ['Juvenile', 'Adult'],
-                multiple = True,
-            ),
-            ui.input_selectize(
-                'behavior_any',
-                'Behavior',
-                choices = [],
-                selected = [],
-                multiple = True,
-            ),
-            width = 300,
         ),
         ui.div(
-            # First row - summary stats
+            {"style": "display: flex; flex-direction: column; gap: 12px;"},
             ui.row(
-                # Left – squirrel count
-                ui.column(6,
+                ui.column(
+                    12,
                     ui.card(
-                        ui.card_header("Unique Squirrel Count"), 
-                        ui.output_text("unique_squirrel_count_text")
-                    ),
-                ),
-                # Right – date range
-                ui.column(6,
-                    ui.card(
-                        ui.card_header("Date Range"), 
-                        ui.output_text("date_range_text")
+                        ui.card_header("Map"),
+                        ui.tags.div(
+                            {"style": "position: relative;"},
+                            ui.output_ui("map_view"),
+                            ui.tags.div(
+                                ui.output_text("rows"),
+                                style=(
+                                    "position: absolute; top: 12px; right: 12px; z-index: 1000; "
+                                    "background: rgba(255, 255, 255, 0.92); border-radius: 8px; "
+                                    "padding: 6px 10px; font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.2);"
+                                ),
+                            ),
+                        ),
+                        full_screen=True,
                     ),
                 ),
             ),
-            # Second row - map
             ui.row(
-                ui.column(12, 
-                    ui.card(
-                        ui.card_header("Map"), 
-                        ui.div("Map goes here", 
-                            style="height: 400px; display: flex; align-items: center; justify-content: center;"))
-                )
-            ),
-            # Third row - bar charts
-            ui.row(
-                ui.column(4,
+                ui.column(
+                    4,
                     ui.card(
                         ui.card_header("Fur Color Counts"),
                         ui.output_ui("fur_color_hist"),
+                        full_screen=True,
                     ),
                 ),
-                ui.column(4,
+                ui.column(
+                    4,
                     ui.card(
                         ui.card_header("Shift Counts"),
                         ui.output_ui("shift_hist"),
+                        full_screen=True,
                     ),
                 ),
-                ui.column(4,
+                ui.column(
+                    4,
                     ui.card(
                         ui.card_header("Top 5 Behaviours"),
                         ui.output_ui("behaviour_hist"),
+                        full_screen=True,
                     ),
                 ),
-            ), 
-            # Fourth row - table
+            ),
             ui.row(
-                ui.column(12,
+                ui.column(
+                    12,
                     ui.card(
-                        ui.card_header("Squirrel Sightings Table"),
-                        ui.output_data_frame("filtered_table"),
+                        ui.card_header("Filtered Data Table"),
+                        ui.output_data_frame("table_view"),
+                        full_screen=True,
                     ),
-                )
+                ),
             ),
         ),
     ),
 )
 
 
-# ---- Server ----
 def server(input, output, session):
-    raw_df = reactive.Value(pd.DataFrame())
-
-    @reactive.effect
-    def _load_once():
-        if not DATA_PATH.exists():
-            raw_df.set(pd.DataFrame())
-            return
-        df = load_squirrel_data(DATA_PATH)
-        print(df.columns.tolist())
-        print(df.shape)
-        print(df.head(2))
-        raw_df.set(df)
-
-    @reactive.effect
-    def _update_filter_choices():
-        df = raw_df.get()
-        if df.empty:
-            return
-
-        def _sorted_unique(col: str) -> list[str]:
-            if col not in df.columns:
-                return []
-            vals = (
-                df[col]
-                .dropna()
-                .astype("string")
-                .replace("nan", pd.NA)
-                .dropna()
-                .unique()
-                .tolist()
-            )
-            return sorted(vals)
-
-        fur_choices = _sorted_unique("primary_fur_color")
-        age_choices = _sorted_unique("age")
-
-        behaviour_cols = [
-            c
-            for c in ["running", "chasing", "climbing", "eating", "foraging", "kuks", "quaas", "moans", "approaches", "indifferent", "runs_from"]
-            if c in df.columns
-        ]
-
-        cur_fur = input.primary_fur_color() or []
-        cur_age = input.age() or []
-
-        sel_fur = [v for v in cur_fur if v in fur_choices] or fur_choices
-        sel_age = [v for v in cur_age if v in age_choices] or age_choices
-
-        ui.update_selectize("primary_fur_color", choices = fur_choices, selected = sel_fur, session = session)
-        ui.update_selectize("age", choices = age_choices, selected = sel_age, session = session)
-        ui.update_selectize("behavior_any", choices = behaviour_cols, selected = input.behavior_any() or [], session = session)
+    @reactive.calc
+    def gdf() -> gpd.GeoDataFrame:
+        return load_geojson(DEFAULT_GEOJSON)
 
     @reactive.calc
-    def filtered_df() -> pd.DataFrame:
-        df = raw_df.get()
-        if df.empty:
-            return df
+    def filtered_df() -> gpd.GeoDataFrame:
+        dat = gdf()
+        selected_shift = input.shift() or []
+        selected_fur = input.fur() or []
+        selected_age = input.age() or []
+        selected_behavior = input.behavior_any() or []
 
-        out = df.copy()
+        out = dat[
+            dat["shift"].isin(selected_shift)
+            & dat["primary_fur_color"].isin(selected_fur)
+            & dat["age"].isin(selected_age)
+        ].copy()
 
-        if 'shift' in out.columns and input.shift():
-            out = out[out['shift'].isin(input.shift())]
-
-        if 'primary_fur_color' in out.columns and input.primary_fur_color():
-            out = out[out['primary_fur_color'].isin(input.primary_fur_color())]
-        
-        if 'age' in out.columns and input.age():
-            out = out[out['age'].isin(input.age())]
-
-        if input.behavior_any():
-            cols = [c for c in input.behavior_any() if c in out.columns]
+        if selected_behavior:
+            cols = [c for c in selected_behavior if c in out.columns]
             if cols:
-                mask = False
+                mask = pd.Series(False, index=out.index)
                 for c in cols:
                     s = out[c]
                     if s.dtype != bool:
-                        s = s.astype('string').str.lower().isin(["true", "t", "1", "yes"])
+                        s = s.astype("string").str.lower().isin(["true", "t", "1", "yes"])
                     mask = mask | s.fillna(False)
-            out = out[mask]
+                out = out[mask]
 
         return out
 
-    @output
-    @render.text
-    def unique_squirrel_count_text():
-        df = filtered_df()
-        if df.empty or "unique_squirrel_id" not in df.columns:
-            return "0"
-        return f"{df['unique_squirrel_id'].nunique(dropna = True):,}"
+    @reactive.effect
+    def _update_filter_choices():
+        df = gdf()
+        behaviour_cols = [c for c in BEHAVIOUR_COLS if c in df.columns]
+        current = input.behavior_any() or []
+        selected = [v for v in current if v in behaviour_cols]
+        ui.update_selectize("behavior_any", choices=behaviour_cols, selected=selected, session=session)
 
     @output
     @render.text
-    def date_range_text():
-        df = filtered_df()
-        if df.empty or "date" not in df.columns:
-            return "-"
-        min_date = df["date"].min()
-        max_date = df["date"].max()
-        return f"{min_date.date()} to {max_date.date()}"
+    def rows() -> str:
+        return f"Squirrels: {len(filtered_df()):,}"
+
+    @output
+    @render.ui
+    def map_view():
+        html_str = map_html(filtered_df(), input.basemap())
+        return ui.tags.iframe(
+            srcdoc=html_str,
+            style="height: 40vh; min-height: 320px; width: 100%; border: 0;",
+        )
 
     @output
     @render.ui
@@ -272,7 +355,6 @@ def server(input, output, session):
             )
             .properties(height=220, width=240)
         )
-
         return chart_html(chart, element_id="fur_color_hist_chart")
 
     @output
@@ -296,7 +378,6 @@ def server(input, output, session):
             )
             .properties(height=220, width=240)
         )
-
         return chart_html(chart, element_id="shift_hist_chart")
 
     @output
@@ -306,20 +387,18 @@ def server(input, output, session):
         if df.empty:
             return ui.em("No data.")
 
-        # Find which behaviour columns actually exist in the dataframe
         cols = [c for c in BEHAVIOUR_COLS if c in df.columns]
         if not cols:
             return ui.em("No behaviour data.")
 
-        # Sum each boolean column and take top 5
         counts = (
             df[cols]
             .apply(lambda s: s.eq(True).sum())
             .reset_index()
         )
-        counts.columns = ['behaviour', 'count']
-        counts = counts.nlargest(5, 'count')
-        counts['behaviour'] = counts['behaviour'].str.replace('_', ' ').str.title()
+        counts.columns = ["behaviour", "count"]
+        counts = counts.nlargest(5, "count")
+        counts["behaviour"] = counts["behaviour"].str.replace("_", " ").str.title()
 
         chart = (
             alt.Chart(counts)
@@ -336,11 +415,26 @@ def server(input, output, session):
 
     @output
     @render.data_frame
-    def filtered_table():
-        df = filtered_df()
+    def table_view():
+        df = filtered_df().copy()
         if df.empty:
-            return render.DataGrid(pd.DataFrame())
-        cols = [c for c in ['unique_squirrel_id', 'date', 'shift', 'age', 'primary_fur_color', 'hectare', 'longitude', 'latitude'] if c in df.columns]
-        return render.DataGrid(df[cols], height = '280px')
+            return render.DataGrid(pd.DataFrame({"message": ["No rows for current filters"]}))
 
-app = App(app_ui, server)
+        df["longitude"] = df.geometry.x
+        df["latitude"] = df.geometry.y
+        cols = [
+            "unique_squirrel_id",
+            "date_clean",
+            "shift",
+            "age",
+            "primary_fur_color",
+            "hectare",
+            "longitude",
+            "latitude",
+        ]
+        available = [c for c in cols if c in df.columns]
+        table_df = df[available].rename(columns={"date_clean": "date"})
+        return render.DataGrid(table_df, filters=True, height="470px")
+
+
+app = App(app_ui, server, static_assets={"/img": PROJECT_ROOT / "img"})
