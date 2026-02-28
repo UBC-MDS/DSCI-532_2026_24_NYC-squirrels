@@ -6,5 +6,7 @@ shiny
 shinywidgets
 folium
 geopandas
+fiona
+pyproj
 matplotlib
 plotly
