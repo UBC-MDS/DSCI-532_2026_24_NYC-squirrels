@@ -9,8 +9,11 @@ dependencies:
   - vl-convert-python=1.9.0
   - jupyterlab=4.2.5
   - shiny=1.2.1
-  - shinywidgets=0.3.4
-  - folium
-  - geopandas
-  - matplotlib
-  - plotly
+  - folium=0.20.0
+  - geopandas=1.1.2
+  - matplotlib=3.10.8
+  - plotly=6.5.2
+  - pip=26.0.1
+  - pip:
+      - shinywidgets==0.3.4
+  
