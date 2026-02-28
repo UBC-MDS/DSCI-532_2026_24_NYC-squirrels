@@ -242,6 +242,14 @@ app_ui = ui.page_fluid(
                     ),
                 ),
             ),
+            ui.input_selectize(
+                'behavior_any',
+                'Behavior',
+                choices = [],
+                selected = [],
+                multiple = True,
+            ),
+            width = 300,
         ),
     ),
 )
