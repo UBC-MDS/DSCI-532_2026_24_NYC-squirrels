@@ -164,12 +164,92 @@ def server(input, output, session):
         print(df.head(2))
         raw_df.set(df)
 
-    @reactive.calc # TODO - update when include filters
+    @reactive.effect
+    def _update_filter_choices():
+        df = raw_df.get()
+        if df.empty:
+            return
+
+        def _sorted_unique(col: str) -> list[str]:
+            if col not in df.columns:
+                return []
+            vals = (
+                df[col]
+                .dropna()
+                .astype("string")
+                .replace("nan", pd.NA)
+                .dropna()
+                .unique()
+                .tolist()
+            )
+            return sorted(vals)
+
+        fur_choices = _sorted_unique("primary_fur_color")
+        age_choices = _sorted_unique("age")
+
+        behaviour_cols = [
+            c
+            for c in ["running", "chasing", "climbing", "eating", "foraging", "kuks", "quaas", "moans", "approaches", "indifferent", "runs_from"]
+            if c in df.columns
+        ]
+
+        cur_fur = input.primary_fur_color() or []
+        cur_age = input.age() or []
+
+        sel_fur = [v for v in cur_fur if v in fur_choices] or fur_choices
+        sel_age = [v for v in cur_age if v in age_choices] or age_choices
+
+        ui.update_selectize("primary_fur_color", choices = fur_choices, selected = sel_fur, session = session)
+        ui.update_selectize("age", choices = age_choices, selected = sel_age, session = session)
+        ui.update_selectize("behavior_any", choices = behaviour_cols, selected = input.behavior_any() or [], session = session)
+
+    @reactive.calc
     def filtered_df() -> pd.DataFrame:
         df = raw_df.get()
         if df.empty:
             return df
-        return df
+
+        out = df.copy()
+
+        if 'shift' in out.columns and input.shift():
+            out = out[out['shift'].isin(input.shift())]
+
+        if 'primary_fur_color' in out.columns and input.primary_fur_color():
+            out = out[out['primary_fur_color'].isin(input.primary_fur_color())]
+        
+        if 'age' in out.columns and input.age():
+            out = out[out['age'].isin(input.age())]
+
+        if input.behavior_any():
+            cols = [c for c in input.behavior_any() if c in out.columns]
+            if cols:
+                mask = False
+                for c in cols:
+                    s = out[c]
+                    if s.dtype != bool:
+                        s = s.astype('string').str.lower().isin(["true", "t", "1", "yes"])
+                    mask = mask | s.fillna(False)
+            out = out[mask]
+
+        return out
+
+    @output
+    @render.text
+    def unique_squirrel_count_text():
+        df = filtered_df()
+        if df.empty or "unique_squirrel_id" not in df.columns:
+            return "0"
+        return f"{df['unique_squirrel_id'].nunique(dropna = True):,}"
+
+    @output
+    @render.text
+    def date_range_text():
+        df = filtered_df()
+        if df.empty or "date" not in df.columns:
+            return "-"
+        min_date = df["date"].min()
+        max_date = df["date"].max()
+        return f"{min_date.date()} to {max_date.date()}"
 
     @output
     @render.ui
@@ -190,7 +270,7 @@ def server(input, output, session):
                     legend=None,
                 ),
             )
-            .properties(height=220, width=380)
+            .properties(height=220, width=240)
         )
 
         return chart_html(chart, element_id="fur_color_hist_chart")
@@ -214,7 +294,7 @@ def server(input, output, session):
                     legend=None,
                 ),
             )
-            .properties(height=220, width=380)
+            .properties(height=220, width=240)
         )
 
         return chart_html(chart, element_id="shift_hist_chart")
@@ -249,7 +329,7 @@ def server(input, output, session):
                 y=alt.Y("behaviour:N", title="Behaviour", sort="-x"),
                 color=alt.value(BEHAVIOUR_COLOUR),
             )
-            .properties(height=220, width=380)
+            .properties(height=220, width=240)
         )
 
         return chart_html(chart, element_id="behaviour_hist_chart")
