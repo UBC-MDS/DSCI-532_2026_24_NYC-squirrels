@@ -52,51 +52,100 @@ app_ui = ui.page_fluid(
         ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega-lite@5"),
         ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega-embed@6"),
     ),
-    # Title + filter placeholders
-    ui.row(
-        ui.column(3, ui.h2("NYC Squirrels")),
-        ui.column(3, ui.input_select("location", "Location:", ["All"])),
-        ui.column(3, ui.input_selectize("age", "Age:", ["All"], multiple=True)),
-        ui.column(3, ui.input_selectize("time", "Time:", ["All", "AM", "PM"], multiple=True)),
-    ),
-    ui.hr(),
-    # Main grid
-    ui.row(
-        # Left – maps
-        ui.column(5,
-            ui.card(ui.card_header("Full Map"), ui.div(style="height:300px;")),
-            ui.card(ui.card_header("Zoomed View"), ui.div(style="height:250px;")),
-        ),
-        # Centre – count + legend
-        ui.column(2,
-            ui.card(ui.card_header("Count of Squirrels"), ui.div(style="height:80px;")),
-            ui.card(ui.card_header("Legend"), ui.div(style="height:120px;")),
-        ),
-        # Right – bar charts
-        ui.column(5,
-            ui.card(
-                ui.card_header("Fur Color Counts"),
-                ui.output_ui("fur_color_hist"),
+    # Title
+    ui.h2('NYC Central Park Squirrel Dashboard'),
+    # Sidebar
+    ui.layout_sidebar(
+        ui.sidebar(
+            ui.input_selectize(
+                'shift',
+                'Shift',
+                choices = ['AM', 'PM'],
+                selected = ['AM', 'PM'],
+                multiple = True,
             ),
-            ui.card(
-                ui.card_header("Shift Counts"),
-                ui.output_ui("shift_hist"),
+            ui.input_selectize(
+                'primary_fur_color',
+                'Primary Fur Color',
+                choices = ['Gray', 'Cinnamon', 'Black'],
+                selected = ['Gray', 'Cinnamon', 'Black'],
+                multiple = True,
             ),
-            ui.card(
-                ui.card_header("Top 5 Behaviours"),
-                ui.output_ui("behaviour_hist"),
+            ui.input_selectize(
+                'age',
+                'Age',
+                choices = ['Juvenile', 'Adult'],
+                selected = ['Juvenile', 'Adult'],
+                multiple = True,
             ),
+            ui.input_selectize(
+                'behavior_any',
+                'Behavior',
+                choices = [],
+                selected = [],
+                multiple = True,
+            ),
+            width = 300,
         ),
-    ), 
-        ui.hr(),
-        ui.row(
-            ui.column(12,
-                ui.card(
-                    ui.card_header("Squirrel Sightings Table"),
-                    ui.output_data_frame("filtered_table"),
+        ui.div(
+            # First row - summary stats
+            ui.row(
+                # Left – squirrel count
+                ui.column(6,
+                    ui.card(
+                        ui.card_header("Unique Squirrel Count"), 
+                        ui.output_text("unique_squirrel_count_text")
+                    ),
+                ),
+                # Right – date range
+                ui.column(6,
+                    ui.card(
+                        ui.card_header("Date Range"), 
+                        ui.output_text("date_range_text")
+                    ),
+                ),
+            ),
+            # Second row - map
+            ui.row(
+                ui.column(12, 
+                    ui.card(
+                        ui.card_header("Map"), 
+                        ui.div("Map goes here", 
+                            style="height: 400px; display: flex; align-items: center; justify-content: center;"))
                 )
-            )
+            ),
+            # Third row - bar charts
+            ui.row(
+                ui.column(4,
+                    ui.card(
+                        ui.card_header("Fur Color Counts"),
+                        ui.output_ui("fur_color_hist"),
+                    ),
+                ),
+                ui.column(4,
+                    ui.card(
+                        ui.card_header("Shift Counts"),
+                        ui.output_ui("shift_hist"),
+                    ),
+                ),
+                ui.column(4,
+                    ui.card(
+                        ui.card_header("Top 5 Behaviours"),
+                        ui.output_ui("behaviour_hist"),
+                    ),
+                ),
+            ), 
+            # Fourth row - table
+            ui.row(
+                ui.column(12,
+                    ui.card(
+                        ui.card_header("Squirrel Sightings Table"),
+                        ui.output_data_frame("filtered_table"),
+                    ),
+                )
+            ),
         ),
+    ),
 )
 
 
