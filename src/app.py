@@ -55,7 +55,12 @@ def load_geojson(path: str) -> gpd.GeoDataFrame:
         if proj_dir.exists():
             pyproj_datadir.set_data_dir(str(proj_dir))
 
-    gdf = gpd.read_file(path, engine="fiona")
+    try:
+        # Posit Connect Cloud includes pyogrio by default; prefer it there.
+        gdf = gpd.read_file(path)
+    except Exception:
+        # Local fallback when pyogrio/proj stack is inconsistent.
+        gdf = gpd.read_file(path, engine="fiona")
     required = ["shift", "primary_fur_color", "age", "date", "hectare", "unique_squirrel_id"]
 
     for col in required:
