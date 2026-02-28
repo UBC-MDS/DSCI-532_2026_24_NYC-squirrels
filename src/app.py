@@ -4,13 +4,15 @@ import glob
 import html
 import json
 import math
+import os
 from pathlib import Path
 
+import altair as alt
 import folium
+import geopandas as gpd
 import pandas as pd
+from pyproj import datadir as pyproj_datadir
 from shiny import App, reactive, render, ui
-from shinywidgets import output_widget, render_widget
-import plotly.graph_objects as go
 
 BEHAVIOR_COLS = [
     "running",
@@ -22,6 +24,10 @@ BEHAVIOR_COLS = [
 
 DEFAULT_CENTER = (40.78204, -73.96399)
 DEFAULT_ZOOM = 14
+FUR_COLOURS = ["#808080", "#A66A3F", "#000000"]
+FUR_ORDER = ["Gray", "Cinnamon", "Black"]
+SHIFT_COLOURS = ["#D9C27A", "#5B87D9"]
+SHIFT_ORDER = ["AM", "PM"]
 
 APP_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = APP_DIR.parent
@@ -40,25 +46,14 @@ def to_bool(series: pd.Series) -> pd.Series:
     return normalized.isin({"true", "t", "1", "yes"}).fillna(False)
 
 
-def load_geojson(path: str) -> pd.DataFrame:
-    with open(path, "r", encoding="utf-8") as f:
-        raw = json.load(f)
+def load_geojson(path: str) -> gpd.GeoDataFrame:
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix:
+        proj_dir = Path(conda_prefix) / "share" / "proj"
+        if proj_dir.exists():
+            pyproj_datadir.set_data_dir(str(proj_dir))
 
-    rows = []
-    for feature in raw.get("features", []):
-        props = feature.get("properties", {}) or {}
-        geom = feature.get("geometry", {}) or {}
-        lon, lat = None, None
-        if geom.get("type") == "Point":
-            coords = geom.get("coordinates", [])
-            if isinstance(coords, list) and len(coords) >= 2:
-                lon, lat = coords[0], coords[1]
-        row = dict(props)
-        row["longitude"] = lon
-        row["latitude"] = lat
-        rows.append(row)
-
-    gdf = pd.DataFrame(rows)
+    gdf = gpd.read_file(path, engine="fiona")
     required = ["shift", "primary_fur_color", "age", "date", "hectare", "unique_squirrel_id"]
 
     for col in required:
@@ -73,8 +68,9 @@ def load_geojson(path: str) -> pd.DataFrame:
     gdf["primary_fur_color"] = gdf["primary_fur_color"].fillna("Unknown")
     gdf["age"] = gdf["age"].fillna("Unknown")
     gdf["date_clean"] = pd.to_datetime(gdf["date"].astype(str), format="%m%d%Y", errors="coerce")
-    gdf["longitude"] = pd.to_numeric(gdf["longitude"], errors="coerce")
-    gdf["latitude"] = pd.to_numeric(gdf["latitude"], errors="coerce")
+
+    if gdf.crs is not None:
+        gdf = gdf.to_crs(epsg=4326)
     return gdf
 
 
@@ -96,20 +92,27 @@ def color_for_shift(shift: str) -> str:
     return palette.get(shift, "#A0A0A0")
 
 
-def map_html(filtered: pd.DataFrame, tile_choice: str) -> str:
+def chart_html(chart: alt.Chart, element_id: str) -> ui.Tag:
+    spec = chart.to_dict()
+    return ui.TagList(
+        ui.tags.div(id=element_id),
+        ui.tags.script(f"vegaEmbed('#{element_id}', {json.dumps(spec)}, {{actions: false}});"),
+    )
+
+
+def map_html(filtered: gpd.GeoDataFrame, tile_choice: str) -> str:
     fmap = folium.Map(
         location=DEFAULT_CENTER,
         zoom_start=DEFAULT_ZOOM,
         tiles=tile_choice,
         control_scale=True,
-        prefer_canvas=True,
     )
 
     for _, row in filtered.iterrows():
-        lon = row.get("longitude")
-        lat = row.get("latitude")
-        if pd.isna(lon) or pd.isna(lat):
+        geom = row.geometry
+        if geom is None or geom.is_empty:
             continue
+        lon, lat = geom.x, geom.y
         fur = str(row.get("primary_fur_color", "Unknown"))
         popup_html = (
             f"<b>ID:</b> {html.escape(str(row.get('unique_squirrel_id', 'Unknown')))}<br/>"
@@ -133,13 +136,8 @@ def map_html(filtered: pd.DataFrame, tile_choice: str) -> str:
         marker.add_to(fmap)
 
     if not filtered.empty:
-        coords = filtered[["longitude", "latitude"]].dropna()
-        if not coords.empty:
-            minx = coords["longitude"].min()
-            maxx = coords["longitude"].max()
-            miny = coords["latitude"].min()
-            maxy = coords["latitude"].max()
-            fmap.fit_bounds([[miny, minx], [maxy, maxx]])
+        minx, miny, maxx, maxy = filtered.total_bounds
+        fmap.fit_bounds([[miny, minx], [maxy, maxx]])
 
     return fmap.get_root().render()
 
@@ -150,6 +148,11 @@ all_fur = sorted(initial["primary_fur_color"].dropna().unique().tolist())
 all_age = sorted(initial["age"].dropna().unique().tolist())
 
 app_ui = ui.page_fluid(
+    ui.tags.head(
+        ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega@5"),
+        ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega-lite@5"),
+        ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega-embed@6"),
+    ),
     ui.tags.div(
         {
             "style": (
@@ -204,74 +207,57 @@ app_ui = ui.page_fluid(
                 selected="OpenStreetMap",
             ),
         ),
-        ui.tags.div(
-            {"style": "height: calc(100vh - 120px); display: flex; flex-direction: column; gap: 12px;"},
-            ui.tags.div(
-                {"style": "flex: 1 1 50%; min-height: 320px;"},
-                ui.row(
-                    ui.column(
-                        12,
-                        ui.card(
-                            ui.card_header("Map"),
+        ui.div(
+            {"style": "display: flex; flex-direction: column; gap: 12px;"},
+            ui.row(
+                ui.column(
+                    12,
+                    ui.card(
+                        ui.card_header("Map"),
+                        ui.tags.div(
+                            {"style": "position: relative;"},
+                            ui.output_ui("map_view"),
                             ui.tags.div(
-                                {"style": "position: relative;"},
-                                ui.output_ui("map_view"),
-                                ui.tags.div(
-                                    ui.output_text("rows"),
-                                    style=(
-                                        "position: absolute; top: 12px; right: 12px; z-index: 1000; "
-                                        "background: rgba(255, 255, 255, 0.92); border-radius: 8px; "
-                                        "padding: 6px 10px; font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.2);"
-                                    ),
+                                ui.output_text("rows"),
+                                style=(
+                                    "position: absolute; top: 12px; right: 12px; z-index: 1000; "
+                                    "background: rgba(255, 255, 255, 0.92); border-radius: 8px; "
+                                    "padding: 6px 10px; font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.2);"
                                 ),
                             ),
-                            full_screen=True,
                         ),
+                        full_screen=True,
                     ),
                 ),
             ),
-            ui.tags.div(
-                {"style": "flex: 1 1 50%; min-height: 320px;"},
-                ui.row(
-                    ui.column(
-                        6,
-                        ui.card(
-                            ui.card_header("Fur Color Counts"),
-                                output_widget("fur_chart"),
-                            full_screen=True,
-                        ),
+            ui.row(
+                ui.column(
+                    6,
+                    ui.card(
+                        ui.card_header("Fur Color Counts"),
+                        ui.output_ui("fur_color_hist"),
+                        full_screen=True,
                     ),
-                    ui.column(
-                        6,
-                        ui.card(
-                            ui.card_header("Shift Counts"),
-                            output_widget("shift_chart"),
-                            full_screen=True,
-                        ),
+                ),
+                ui.column(
+                    6,
+                    ui.card(
+                        ui.card_header("Shift Counts"),
+                        ui.output_ui("shift_hist"),
+                        full_screen=True,
                     ),
                 ),
             ),
-            ui.tags.div(
-                {"style": "flex: 1 1 50%; min-height: 320px;"},
-                ui.row(
-                    ui.column(
-                        12,
-                        ui.card(
-                            ui.card_header("Filtered Data Table"),
-                            ui.output_data_frame("table_view"),
-                            full_screen=True,
-                        ),
+            ui.row(
+                ui.column(
+                    12,
+                    ui.card(
+                        ui.card_header("Filtered Data Table"),
+                        ui.output_data_frame("table_view"),
+                        full_screen=True,
                     ),
                 ),
             ),
-            ui.input_selectize(
-                'behavior_any',
-                'Behavior',
-                choices = [],
-                selected = [],
-                multiple = True,
-            ),
-            width = 300,
         ),
     ),
 )
@@ -279,11 +265,11 @@ app_ui = ui.page_fluid(
 
 def server(input, output, session):
     @reactive.calc
-    def gdf() -> pd.DataFrame:
+    def gdf() -> gpd.GeoDataFrame:
         return load_geojson(DEFAULT_GEOJSON)
 
     @reactive.calc
-    def filtered() -> pd.DataFrame:
+    def filtered_df() -> gpd.GeoDataFrame:
         dat = gdf()
         selected_shift = input.shift() or []
         selected_fur = input.fur() or []
@@ -300,111 +286,72 @@ def server(input, output, session):
     @output
     @render.text
     def rows() -> str:
-        return f"Squirrels: {len(filtered()):,}"
+        return f"Squirrels: {len(filtered_df()):,}"
 
     @output
     @render.ui
     def map_view():
-        html_str = map_html(filtered(), input.basemap())
+        html_str = map_html(filtered_df(), input.basemap())
         return ui.tags.iframe(
             srcdoc=html_str,
             style="height: 40vh; min-height: 320px; width: 100%; border: 0;",
         )
 
     @output
-    @render_widget
-    def fur_chart():
-        df = filtered()
-        if df.empty:
-            fig = go.Figure()
-            fig.add_annotation(
-                text="No data for current filters",
-                showarrow=False,
-                x=0.5,
-                y=0.5,
-                xref="paper",
-                yref="paper",
-            )
-            fig.update_xaxes(visible=False)
-            fig.update_yaxes(visible=False)
-            fig.update_layout(height=250, margin=dict(l=40, r=20, t=30, b=40))
-            return fig
+    @render.ui
+    def fur_color_hist():
+        df = filtered_df()
+        if df.empty or "primary_fur_color" not in df.columns:
+            return ui.em("No data.")
 
-        counts = df["primary_fur_color"].value_counts().sort_values(ascending=False)
-        fig = go.Figure()
-        for fur, count in counts.items():
-            fig.add_trace(
-                go.Bar(
-                    x=[str(fur)],
-                    y=[int(count)],
-                    name=str(fur),
-                    marker_color=color_for_fur(str(fur)),
-                    hovertemplate="Fur: %{x}<br>Count: %{y}<extra></extra>",
-                )
+        chart = (
+            alt.Chart(df)
+            .mark_bar()
+            .encode(
+                x=alt.X("primary_fur_color:N", title="Fur color", sort=FUR_ORDER),
+                y=alt.Y("count():Q", title="Sightings"),
+                color=alt.Color(
+                    "primary_fur_color:N",
+                    scale=alt.Scale(domain=FUR_ORDER, range=FUR_COLOURS),
+                    legend=None,
+                ),
             )
-        ymax = int(counts.max())
-        fig.update_layout(
-            height=250,
-            margin=dict(l=50, r=20, t=30, b=70),
-            showlegend=True,
-            legend=dict(x=0.98, y=0.98, xanchor="right", yanchor="top"),
-            xaxis_title="Fur color",
-            yaxis_title="Count",
-            yaxis=dict(showgrid=True, gridcolor="rgba(0,0,0,0.1)", dtick=max(1, math.ceil(ymax / 8))),
-            barmode="group",
+            .properties(height=220, width=240)
         )
-        return fig
+        return chart_html(chart, element_id="fur_color_hist_chart")
 
     @output
-    @render_widget
-    def shift_chart():
-        df = filtered()
-        if df.empty:
-            fig = go.Figure()
-            fig.add_annotation(
-                text="No data for current filters",
-                showarrow=False,
-                x=0.5,
-                y=0.5,
-                xref="paper",
-                yref="paper",
-            )
-            fig.update_xaxes(visible=False)
-            fig.update_yaxes(visible=False)
-            fig.update_layout(height=250, margin=dict(l=40, r=20, t=30, b=40))
-            return fig
+    @render.ui
+    def shift_hist():
+        df = filtered_df()
+        if df.empty or "shift" not in df.columns:
+            return ui.em("No data.")
 
-        counts = df["shift"].value_counts().sort_values(ascending=False)
-        fig = go.Figure()
-        for shift, count in counts.items():
-            fig.add_trace(
-                go.Bar(
-                    x=[str(shift)],
-                    y=[int(count)],
-                    name=str(shift),
-                    marker_color=color_for_shift(str(shift)),
-                    hovertemplate="Shift: %{x}<br>Count: %{y}<extra></extra>",
-                )
+        chart = (
+            alt.Chart(df)
+            .mark_bar()
+            .encode(
+                x=alt.X("shift:N", title="Shift", sort=SHIFT_ORDER),
+                y=alt.Y("count():Q", title="Sightings"),
+                color=alt.Color(
+                    "shift:N",
+                    scale=alt.Scale(domain=SHIFT_ORDER, range=SHIFT_COLOURS),
+                    legend=None,
+                ),
             )
-        ymax = int(counts.max())
-        fig.update_layout(
-            height=250,
-            margin=dict(l=50, r=20, t=30, b=60),
-            showlegend=True,
-            legend=dict(x=0.98, y=0.98, xanchor="right", yanchor="top"),
-            xaxis_title="Shift",
-            yaxis_title="Count",
-            yaxis=dict(showgrid=True, gridcolor="rgba(0,0,0,0.1)", dtick=max(1, math.ceil(ymax / 8))),
-            barmode="group",
+            .properties(height=220, width=240)
         )
-        return fig
+        return chart_html(chart, element_id="shift_hist_chart")
 
     @output
     @render.data_frame
     def table_view():
-        df = filtered().copy()
+        df = filtered_df().copy()
         if df.empty:
             return render.DataGrid(pd.DataFrame({"message": ["No rows for current filters"]}))
+
+        df["longitude"] = df.geometry.x
+        df["latitude"] = df.geometry.y
         cols = [
             "unique_squirrel_id",
             "date_clean",
