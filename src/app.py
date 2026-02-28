@@ -102,6 +102,7 @@ def map_html(filtered: pd.DataFrame, tile_choice: str) -> str:
         zoom_start=DEFAULT_ZOOM,
         tiles=tile_choice,
         control_scale=True,
+        prefer_canvas=True,
     )
 
     for _, row in filtered.iterrows():
