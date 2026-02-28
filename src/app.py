@@ -21,6 +21,8 @@ BEHAVIOR_COLS = [
     "eating",
     "foraging"
 ]
+BEHAVIOUR_COLS = BEHAVIOR_COLS
+BEHAVIOUR_COLOUR = "#6A9E6F"
 
 DEFAULT_CENTER = (40.78204, -73.96399)
 DEFAULT_ZOOM = 14
@@ -206,6 +208,13 @@ app_ui = ui.page_fluid(
                 choices=["OpenStreetMap", "CartoDB positron", "CartoDB dark_matter"],
                 selected="OpenStreetMap",
             ),
+            ui.input_selectize(
+                "behavior_any",
+                "Behavior",
+                choices=[],
+                selected=[],
+                multiple=True,
+            ),
         ),
         ui.div(
             {"style": "display: flex; flex-direction: column; gap: 12px;"},
@@ -232,7 +241,7 @@ app_ui = ui.page_fluid(
             ),
             ui.row(
                 ui.column(
-                    6,
+                    4,
                     ui.card(
                         ui.card_header("Fur Color Counts"),
                         ui.output_ui("fur_color_hist"),
@@ -240,10 +249,18 @@ app_ui = ui.page_fluid(
                     ),
                 ),
                 ui.column(
-                    6,
+                    4,
                     ui.card(
                         ui.card_header("Shift Counts"),
                         ui.output_ui("shift_hist"),
+                        full_screen=True,
+                    ),
+                ),
+                ui.column(
+                    4,
+                    ui.card(
+                        ui.card_header("Top 5 Behaviours"),
+                        ui.output_ui("behaviour_hist"),
                         full_screen=True,
                     ),
                 ),
@@ -274,6 +291,7 @@ def server(input, output, session):
         selected_shift = input.shift() or []
         selected_fur = input.fur() or []
         selected_age = input.age() or []
+        selected_behavior = input.behavior_any() or []
 
         out = dat[
             dat["shift"].isin(selected_shift)
@@ -281,7 +299,26 @@ def server(input, output, session):
             & dat["age"].isin(selected_age)
         ].copy()
 
+        if selected_behavior:
+            cols = [c for c in selected_behavior if c in out.columns]
+            if cols:
+                mask = pd.Series(False, index=out.index)
+                for c in cols:
+                    s = out[c]
+                    if s.dtype != bool:
+                        s = s.astype("string").str.lower().isin(["true", "t", "1", "yes"])
+                    mask = mask | s.fillna(False)
+                out = out[mask]
+
         return out
+
+    @reactive.effect
+    def _update_filter_choices():
+        df = gdf()
+        behaviour_cols = [c for c in BEHAVIOUR_COLS if c in df.columns]
+        current = input.behavior_any() or []
+        selected = [v for v in current if v in behaviour_cols]
+        ui.update_selectize("behavior_any", choices=behaviour_cols, selected=selected, session=session)
 
     @output
     @render.text
@@ -342,6 +379,39 @@ def server(input, output, session):
             .properties(height=220, width=240)
         )
         return chart_html(chart, element_id="shift_hist_chart")
+
+    @output
+    @render.ui
+    def behaviour_hist():
+        df = filtered_df()
+        if df.empty:
+            return ui.em("No data.")
+
+        cols = [c for c in BEHAVIOUR_COLS if c in df.columns]
+        if not cols:
+            return ui.em("No behaviour data.")
+
+        counts = (
+            df[cols]
+            .apply(lambda s: s.eq(True).sum())
+            .reset_index()
+        )
+        counts.columns = ["behaviour", "count"]
+        counts = counts.nlargest(5, "count")
+        counts["behaviour"] = counts["behaviour"].str.replace("_", " ").str.title()
+
+        chart = (
+            alt.Chart(counts)
+            .mark_bar()
+            .encode(
+                x=alt.X("count:Q", title="Sightings"),
+                y=alt.Y("behaviour:N", title="Behaviour", sort="-x"),
+                color=alt.value(BEHAVIOUR_COLOUR),
+            )
+            .properties(height=220, width=240)
+        )
+
+        return chart_html(chart, element_id="behaviour_hist_chart")
 
     @output
     @render.data_frame
