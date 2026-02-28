@@ -27,7 +27,8 @@ Central Park has thousands of squirrel sightings across space, time, and traits.
 - Preview build: <https://elsereneee-nycsquirrels-preview.share.connect.posit.cloud>
 
 ### Demo
-![Project Demo](img/demo.mp4)
+<video src="img/demo.mp4" width="100%" controls muted>
+</video>
 
 ## For Contributors
 
