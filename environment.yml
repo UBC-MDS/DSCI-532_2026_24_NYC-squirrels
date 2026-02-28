@@ -10,3 +10,7 @@ dependencies:
   - jupyterlab=4.2.5
   - shiny=1.2.1
   - shinywidgets=0.3.4
+  - folium
+  - geopandas
+  - matplotlib
+  - plotly
