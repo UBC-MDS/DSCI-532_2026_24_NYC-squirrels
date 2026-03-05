@@ -274,9 +274,15 @@ app_ui = ui.page_fluid(
                 ui.column(
                     12,
                     ui.card(
-                        ui.card_header("Filtered Data Table"),
-                        ui.output_data_frame("table_view"),
-                        full_screen=True,
+                        ui.card_header(
+                            ui.div(
+                            ui.span("Filtered Data Table"),
+                            ui.download_button("download_csv", "Download CSV", class_="btn-success btn-sm"),
+                            style="display: flex; justify-content: space-between; align-items: center;"
+                            )
+                        ),
+                    ui.output_data_frame("table_view"),
+                    full_screen=True,
                     ),
                 ),
             ),
@@ -441,5 +447,13 @@ def server(input, output, session):
         table_df = df[available].rename(columns={"date_clean": "date"})
         return render.DataGrid(table_df, filters=True, height="470px")
 
+    @render.download(filename="squirrel_report.csv")
+    def download_csv():
+        df_to_save = filtered_df().copy()
+
+        if "geometry" in df_to_save.columns:
+            df_to_save = pd.DataFrame(df_to_save.drop(columns="geometry"))
+    
+        yield df_to_save.to_csv(index=False)
 
 app = App(app_ui, server, static_assets={"/img": PROJECT_ROOT / "img"})
