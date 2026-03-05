@@ -6,5 +6,9 @@ shiny
 shinywidgets
 folium
 geopandas
+fiona
 matplotlib
 plotly
+python-dotenv
+querychat
+chatlas
