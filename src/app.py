@@ -137,7 +137,7 @@ def map_html(filtered: gpd.GeoDataFrame, tile_choice: str) -> str:
             fill_color=color_for_fur(fur),
             fill_opacity=0.8,
             weight=0,
-            popup=folium.Popup(popup_html, max_width=250),
+            tooltip=folium.Tooltip(popup_html, max_width=250),
         )
         marker.add_to(fmap)
 
@@ -222,13 +222,14 @@ app_ui = ui.page_fluid(
         ),
         ui.div(
             {"style": "display: flex; flex-direction: column; gap: 12px;"},
-            ui.row(
-                ui.column(
-                    12,
+            ui.div(
+                {"style": "display: flex; gap: 12px; align-items: stretch;"},
+                ui.div(
+                    {"style": "flex: 7 1 0%; min-width: 0;"},
                     ui.card(
                         ui.card_header("Map"),
                         ui.tags.div(
-                            {"style": "position: relative;"},
+                            {"style": "position: relative; flex: 1; min-height: 0;"},
                             ui.output_ui("map_view"),
                             ui.tags.div(
                                 ui.output_text("rows"),
@@ -240,35 +241,33 @@ app_ui = ui.page_fluid(
                             ),
                         ),
                         full_screen=True,
+                        fillable=True,
+                        style="height: 100%;",
                     ),
                 ),
-            ),
-            ui.row(
-                ui.column(
-                    4,
+                ui.div(
+                    {"style": "flex: 5 1 0%; min-width: 0; display: flex; flex-direction: column; gap: 8px;"},
                     ui.card(
                         ui.card_header("Fur Color Counts"),
                         ui.output_ui("fur_color_hist"),
                         full_screen=True,
+                        style="flex: 1; min-height: 0;",
                     ),
-                ),
-                ui.column(
-                    4,
                     ui.card(
                         ui.card_header("Shift Counts"),
                         ui.output_ui("shift_hist"),
                         full_screen=True,
+                        style="flex: 1; min-height: 0;",
                     ),
-                ),
-                ui.column(
-                    4,
                     ui.card(
                         ui.card_header("Top 5 Behaviors"),
                         ui.output_ui("behavior_hist"),
                         full_screen=True,
+                        style="flex: 1; min-height: 0;",
                     ),
                 ),
             ),
+            ui.tags.hr(style="margin: 0;"),
             ui.row(
                 ui.column(
                     12,
@@ -345,7 +344,7 @@ def server(input, output, session):
         html_str = map_html(filtered_df(), input.basemap())
         return ui.tags.iframe(
             srcdoc=html_str,
-            style="height: 40vh; min-height: 320px; width: 100%; border: 0;",
+            style="height: 100%; min-height: 480px; width: 100%; border: 0;",
         )
 
     @output
@@ -359,15 +358,15 @@ def server(input, output, session):
             alt.Chart(df)
             .mark_bar()
             .encode(
-                x=alt.X("primary_fur_color:N", title="Fur color", sort=FUR_ORDER),
-                y=alt.Y("count():Q", title="Sightings"),
+                x=alt.X("count():Q", title="Sightings"),
+                y=alt.Y("primary_fur_color:N", title="Fur color", sort=FUR_ORDER),
                 color=alt.Color(
                     "primary_fur_color:N",
                     scale=alt.Scale(domain=FUR_ORDER, range=FUR_COLOURS),
                     legend=None,
                 ),
             )
-            .properties(height=220, width=240)
+            .properties(height=150, width=240)
         )
         return chart_html(chart, element_id="fur_color_hist_chart")
 
@@ -382,15 +381,15 @@ def server(input, output, session):
             alt.Chart(df)
             .mark_bar()
             .encode(
-                x=alt.X("shift:N", title="Shift", sort=SHIFT_ORDER),
-                y=alt.Y("count():Q", title="Sightings"),
+                x=alt.X("count():Q", title="Sightings"),
+                y=alt.Y("shift:N", title="Shift", sort=SHIFT_ORDER),
                 color=alt.Color(
                     "shift:N",
                     scale=alt.Scale(domain=SHIFT_ORDER, range=SHIFT_COLOURS),
                     legend=None,
                 ),
             )
-            .properties(height=220, width=240)
+            .properties(height=150, width=240)
         )
         return chart_html(chart, element_id="shift_hist_chart")
 
@@ -422,7 +421,7 @@ def server(input, output, session):
                 y=alt.Y("behavior:N", title="Behavior", sort="-x"),
                 color=alt.value(BEHAVIOUR_COLOUR),
             )
-            .properties(height=220, width=240)
+            .properties(height=150, width=240)
         )
 
         return chart_html(chart, element_id="behavior_hist_chart")
