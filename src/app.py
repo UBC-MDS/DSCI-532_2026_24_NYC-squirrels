@@ -271,13 +271,17 @@ app_ui = ui.page_fluid(
                     ui.card(
                         ui.card_header(
                             ui.div(
-                            ui.span("Filtered Data Table"),
-                            ui.download_button("download_csv", "Download CSV", class_="btn-success btn-sm"),
-                            style="display: flex; justify-content: space-between; align-items: center;"
+                                ui.span("Filtered Data Table"),
+                                ui.download_button(
+                                    "download_csv", 
+                                    "Download", 
+                                    class_="btn-success btn-sm"
+                                ),
+                                style="display: flex; justify-content: space-between; align-items: center;"
                             )
                         ),
-                    ui.output_data_frame("table_view"),
-                    full_screen=True,
+                        ui.output_data_frame("table_view"),
+                        full_screen=True,
                     ),
                 ),
             ),
@@ -299,11 +303,16 @@ def server(input, output, session):
         selected_age = input.age() or []
         selected_behavior = input.behavior_any() or []
 
-        out = dat[
-            dat["shift"].isin(selected_shift)
-            & dat["primary_fur_color"].isin(selected_fur)
-            & dat["age"].isin(selected_age)
-        ].copy()
+        out = dat.copy()
+        
+        if selected_shift:
+            out = out[out["shift"].isin(selected_shift)]
+        
+        if selected_fur:
+            out = out[out["primary_fur_color"].isin(selected_fur)]
+            
+        if selected_age:
+            out = out[out["age"].isin(selected_age)]
 
         if selected_behavior:
             cols = [c for c in selected_behavior if c in out.columns]
