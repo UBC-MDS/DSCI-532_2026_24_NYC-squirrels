@@ -21,7 +21,6 @@ BEHAVIOR_COLS = [
     "eating",
     "foraging"
 ]
-BEHAVIOUR_COLS = BEHAVIOR_COLS
 BEHAVIOUR_COLOUR = "#6A9E6F"
 
 DEFAULT_CENTER = (40.78204, -73.96399)
@@ -264,8 +263,8 @@ app_ui = ui.page_fluid(
                 ui.column(
                     4,
                     ui.card(
-                        ui.card_header("Top 5 Behaviours"),
-                        ui.output_ui("behaviour_hist"),
+                        ui.card_header("Top 5 Behaviors"),
+                        ui.output_ui("behavior_hist"),
                         full_screen=True,
                     ),
                 ),
@@ -296,13 +295,11 @@ app_ui = ui.page_fluid(
 
 
 def server(input, output, session):
-    @reactive.calc
-    def gdf() -> gpd.GeoDataFrame:
-        return load_geojson(DEFAULT_GEOJSON)
+    _gdf = reactive.Value(initial)
 
     @reactive.calc
     def filtered_df() -> gpd.GeoDataFrame:
-        dat = gdf()
+        dat = _gdf.get()
         selected_shift = input.shift() or []
         selected_fur = input.fur() or []
         selected_age = input.age() or []
@@ -324,21 +321,18 @@ def server(input, output, session):
             if cols:
                 mask = pd.Series(False, index=out.index)
                 for c in cols:
-                    s = out[c]
-                    if s.dtype != bool:
-                        s = s.astype("string").str.lower().isin(["true", "t", "1", "yes"])
-                    mask = mask | s.fillna(False)
+                    mask = mask | out[c].fillna(False)
                 out = out[mask]
 
         return out
 
     @reactive.effect
     def _update_filter_choices():
-        df = gdf()
-        behaviour_cols = [c for c in BEHAVIOUR_COLS if c in df.columns]
+        df = _gdf.get()
+        behavior_cols = [c for c in BEHAVIOR_COLS if c in df.columns]
         current = input.behavior_any() or []
-        selected = [v for v in current if v in behaviour_cols]
-        ui.update_selectize("behavior_any", choices=behaviour_cols, selected=selected, session=session)
+        selected = [v for v in current if v in behavior_cols]
+        ui.update_selectize("behavior_any", choices=behavior_cols, selected=selected, session=session)
 
     @output
     @render.text
@@ -402,36 +396,36 @@ def server(input, output, session):
 
     @output
     @render.ui
-    def behaviour_hist():
+    def behavior_hist():
         df = filtered_df()
         if df.empty:
             return ui.em("No data.")
 
-        cols = [c for c in BEHAVIOUR_COLS if c in df.columns]
+        cols = [c for c in BEHAVIOR_COLS if c in df.columns]
         if not cols:
-            return ui.em("No behaviour data.")
+            return ui.em("No behavior data.")
 
         counts = (
             df[cols]
             .apply(lambda s: s.eq(True).sum())
             .reset_index()
         )
-        counts.columns = ["behaviour", "count"]
+        counts.columns = ["behavior", "count"]
         counts = counts.nlargest(5, "count")
-        counts["behaviour"] = counts["behaviour"].str.replace("_", " ").str.title()
+        counts["behavior"] = counts["behavior"].str.replace("_", " ").str.title()
 
         chart = (
             alt.Chart(counts)
             .mark_bar()
             .encode(
                 x=alt.X("count:Q", title="Sightings"),
-                y=alt.Y("behaviour:N", title="Behaviour", sort="-x"),
+                y=alt.Y("behavior:N", title="Behavior", sort="-x"),
                 color=alt.value(BEHAVIOUR_COLOUR),
             )
             .properties(height=220, width=240)
         )
 
-        return chart_html(chart, element_id="behaviour_hist_chart")
+        return chart_html(chart, element_id="behavior_hist_chart")
 
     @output
     @render.data_frame
