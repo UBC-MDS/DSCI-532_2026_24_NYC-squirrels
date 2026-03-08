@@ -3,7 +3,6 @@ from __future__ import annotations
 import glob
 import html
 import json
-import math
 import os
 from pathlib import Path
 
@@ -11,6 +10,7 @@ import altair as alt
 import folium
 import geopandas as gpd
 import pandas as pd
+from querychat import QueryChat
 from pyproj import datadir as pyproj_datadir
 from shiny import App, reactive, render, ui
 
@@ -29,6 +29,7 @@ FUR_COLOURS = ["#808080", "#A66A3F", "#000000"]
 FUR_ORDER = ["Gray", "Cinnamon", "Black"]
 SHIFT_COLOURS = ["#D9C27A", "#5B87D9"]
 SHIFT_ORDER = ["AM", "PM"]
+AGE_COLOURS = ["#E07B54", "#7BB8E0", "#A0A0A0"]
 
 APP_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = APP_DIR.parent
@@ -153,12 +154,24 @@ all_shift = sorted(initial["shift"].dropna().unique().tolist())
 all_fur = sorted(initial["primary_fur_color"].dropna().unique().tolist())
 all_age = sorted(initial["age"].dropna().unique().tolist())
 
+_chat_base_df = pd.DataFrame(initial.drop(columns="geometry"))
+_chat_base_df["longitude"] = initial.geometry.x.values
+_chat_base_df["latitude"]  = initial.geometry.y.values
+
+qc = QueryChat(
+    _chat_base_df,
+    "squirrels",
+    client="anthropic/claude-sonnet-4-5",
+    )
+# ── UI ───────────────────────────────────────────────────────────────────────
+
 app_ui = ui.page_fluid(
     ui.tags.head(
         ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega@5"),
         ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega-lite@5"),
         ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega-embed@6"),
     ),
+    # ── Hero banner ──────────────────────────────────────────────────────────
     ui.tags.div(
         {
             "style": (
@@ -195,107 +208,192 @@ app_ui = ui.page_fluid(
             ),
         ),
     ),
-    ui.layout_sidebar(
-        ui.sidebar(
-            ui.input_selectize("shift", "Shift", choices=all_shift, selected=all_shift, multiple=True),
-            ui.input_selectize(
-                "fur",
-                "Primary Fur Color",
-                choices=all_fur,
-                selected=all_fur,
-                multiple=True,
-            ),
-            ui.input_selectize("age", "Age", choices=all_age, selected=all_age, multiple=True),
-            ui.input_select(
-                "basemap",
-                "Basemap",
-                choices=["OpenStreetMap", "CartoDB positron", "CartoDB dark_matter"],
-                selected="OpenStreetMap",
-            ),
-            ui.input_selectize(
-                "behavior_any",
-                "Behavior",
-                choices=[],
-                selected=[],
-                multiple=True,
-            ),
-        ),
-        ui.div(
-            {"style": "display: flex; flex-direction: column; gap: 12px;"},
-            ui.div(
-                {"style": "display: flex; gap: 12px; align-items: stretch;"},
+
+    ui.navset_tab(
+
+        ui.nav_panel(
+            "🗺️ Map",
+
+            ui.layout_sidebar(
+
+                ui.sidebar(
+                    ui.input_selectize("shift", "Shift", choices=all_shift, selected=all_shift, multiple=True),
+                    ui.input_selectize("fur", "Primary Fur Color", choices=all_fur, selected=all_fur, multiple=True),
+                    ui.input_selectize("age", "Age", choices=all_age, selected=all_age, multiple=True),
+                    ui.input_select(
+                        "basemap",
+                        "Basemap",
+                        choices=["OpenStreetMap", "CartoDB positron", "CartoDB dark_matter"],
+                        selected="OpenStreetMap",
+                    ),
+                    ui.input_selectize(
+                        "behavior_any",
+                        "Behavior",
+                        choices=[],
+                        selected=[],
+                        multiple=True,
+                    ),
+                ),
+
                 ui.div(
-                    {"style": "flex: 7 1 0%; min-width: 0;"},
-                    ui.card(
-                        ui.card_header("Map"),
-                        ui.tags.div(
-                            {"style": "position: relative; flex: 1; min-height: 0;"},
-                            ui.output_ui("map_view"),
-                            ui.tags.div(
-                                ui.output_text("rows"),
-                                style=(
-                                    "position: absolute; top: 12px; right: 12px; z-index: 1000; "
-                                    "background: rgba(255, 255, 255, 0.92); border-radius: 8px; "
-                                    "padding: 6px 10px; font-weight: 600; box-shadow: 0 1px 4px rgba(0,0,0,0.2);"
+                    {"style": "display:flex; flex-direction:column; gap:12px; margin-top:10px;"},
+
+                    ui.div(
+                        {
+                            "style": (
+                                "display:flex; gap:12px; align-items:stretch; "
+                                "height:600px;"
+                            )
+                        },
+
+                        ui.div(
+                            {"style": "flex:7 1 0%; min-width:0; display:flex;"},
+                            ui.card(
+                                ui.card_header("Map"),
+                                ui.tags.div(
+                                    {"style": "height:100%;"},
+                                    ui.output_ui("map_view"),
                                 ),
+                                full_screen=True,
+                                style="flex:1;",
                             ),
                         ),
-                        full_screen=True,
-                        fillable=True,
-                        style="height: 100%;",
+
+                        ui.div(
+                            {
+                                "style": (
+                                    "flex:5 1 0%; min-width:0; "
+                                    "display:flex; flex-direction:column; gap:8px;"
+                                )
+                            },
+
+                            ui.card(
+                                ui.card_header("Fur Color Counts"),
+                                ui.output_ui("fur_color_hist"),
+                                full_screen=True,
+                                style="flex:1;",
+                            ),
+
+                            ui.card(
+                                ui.card_header("Shift Counts"),
+                                ui.output_ui("shift_hist"),
+                                full_screen=True,
+                                style="flex:1;",
+                            ),
+
+                            ui.card(
+                                ui.card_header("Top 5 Behaviors"),
+                                ui.output_ui("behavior_hist"),
+                                full_screen=True,
+                                style="flex:1;",
+                            ),
+                        ),
                     ),
-                ),
-                ui.div(
-                    {"style": "flex: 5 1 0%; min-width: 0; display: flex; flex-direction: column; gap: 8px;"},
-                    ui.card(
-                        ui.card_header("Fur Color Counts"),
-                        ui.output_ui("fur_color_hist"),
-                        full_screen=True,
-                        style="flex: 1; min-height: 0;",
-                    ),
-                    ui.card(
-                        ui.card_header("Shift Counts"),
-                        ui.output_ui("shift_hist"),
-                        full_screen=True,
-                        style="flex: 1; min-height: 0;",
-                    ),
-                    ui.card(
-                        ui.card_header("Top 5 Behaviors"),
-                        ui.output_ui("behavior_hist"),
-                        full_screen=True,
-                        style="flex: 1; min-height: 0;",
+
+                    ui.tags.hr(),
+
+                    ui.row(
+                        ui.column(
+                            12,
+                            ui.card(
+                                ui.card_header(
+                                    ui.div(
+                                        ui.span("Filtered Data Table"),
+                                        ui.download_button(
+                                            "download_csv",
+                                            "Download",
+                                            class_="btn-success btn-sm",
+                                        ),
+                                        style="display:flex; justify-content:space-between;",
+                                    )
+                                ),
+                                ui.output_data_frame("table_view"),
+                                full_screen=True,
+                            ),
+                        )
                     ),
                 ),
             ),
-            ui.tags.hr(style="margin: 0;"),
-            ui.row(
-                ui.column(
-                    12,
-                    ui.card(
-                        ui.card_header(
-                            ui.div(
-                                ui.span("Filtered Data Table"),
-                                ui.download_button(
-                                    "download_csv", 
-                                    "Download", 
-                                    class_="btn-success btn-sm"
-                                ),
-                                style="display: flex; justify-content: space-between; align-items: center;"
-                            )
+        ),
+
+        ui.nav_panel(
+            "🤖 AI Analysis",
+
+            ui.div(
+                {"style": "display:flex; flex-direction:column; gap:12px; margin-top:10px;"},
+
+                ui.card( # TODO: placeholder for AI
+                    ui.card_header("💬 Ask the AI to filter the data"),
+                    qc.ui(),
+                ),
+
+                ui.div(
+                    {"style": "display:flex; gap:12px;"},
+
+                    ui.div(
+                        {"style": "flex:1;"},
+                        ui.card(
+                            ui.card_header("Fur Color Counts"),
+                            ui.output_ui("ai_fur_chart"),
+                            full_screen=True,
                         ),
-                        ui.output_data_frame("table_view"),
-                        full_screen=True,
+                    ),
+
+                    ui.div(
+                        {"style": "flex:1;"},
+                        ui.card(
+                            ui.card_header("Shift Counts"),
+                            ui.output_ui("ai_shift_chart"),
+                            full_screen=True,
+                        ),
+                    ),
+
+                    ui.div(
+                        {"style": "flex:1;"},
+                        ui.card(
+                            ui.card_header("Top 5 Behaviors"),
+                            ui.output_ui("ai_behavior_chart"),
+                            full_screen=True,
+                        ),
+                    ),
+                ),
+
+                ui.tags.hr(),
+
+                ui.row(
+                    ui.column(
+                        12,
+                        ui.card(
+                            ui.card_header(
+                                ui.div(
+                                    ui.div(
+                                        ui.span("Chat-Filtered Dataset"),
+                                        ui.output_text("ai_rows"),
+                                        style="display:flex; gap:10px; align-items:center;",
+                                    ),
+                                    ui.download_button(
+                                        "download_csv_ai",
+                                        "⬇ Download CSV",
+                                        class_="btn-success btn-sm",
+                                    ),
+                                    style="display:flex; justify-content:space-between;",
+                                )
+                            ),
+                            ui.output_data_frame("ai_table_view"),
+                            full_screen=True,
+                        ),
                     ),
                 ),
             ),
         ),
     ),
-)
-
+)  
 
 def server(input, output, session):
     _gdf = reactive.Value(initial)
+    qc_vals = qc.server()
 
+    # ── Tab 1 outputs and calculations ─────────────────────────────────────────────────
     @reactive.calc
     def filtered_df() -> gpd.GeoDataFrame:
         dat = _gdf.get()
@@ -366,7 +464,7 @@ def server(input, output, session):
                     legend=None,
                 ),
             )
-            .properties(height=150, width=240)
+            .properties(height=60, width=220)
         )
         return chart_html(chart, element_id="fur_color_hist_chart")
 
@@ -389,7 +487,7 @@ def server(input, output, session):
                     legend=None,
                 ),
             )
-            .properties(height=150, width=240)
+            .properties(height=60, width=220)
         )
         return chart_html(chart, element_id="shift_hist_chart")
 
@@ -421,7 +519,7 @@ def server(input, output, session):
                 y=alt.Y("behavior:N", title="Behavior", sort="-x"),
                 color=alt.value(BEHAVIOUR_COLOUR),
             )
-            .properties(height=150, width=240)
+            .properties(height=60, width=220)
         )
 
         return chart_html(chart, element_id="behavior_hist_chart")
@@ -457,5 +555,99 @@ def server(input, output, session):
             df_to_save = pd.DataFrame(df_to_save.drop(columns="geometry"))
     
         yield df_to_save.to_csv(index=False)
+
+    # ── Tab 2 outputs: charts ─────────────────────────────────────────────────
+    @output
+    @render.text
+    def ai_rows() -> str:
+        df = qc_vals.df()
+        try:
+            return f"({len(df):,} squirrels)"
+        except Exception:
+            return "(— squirrels)"
+
+    @output
+    @render.ui
+    def ai_fur_chart(): # PROOF
+        df = pd.DataFrame(qc_vals.df())  # uses querychat df
+        if df.empty or "primary_fur_color" not in df.columns:
+            return ui.em("No data.")
+        chart = (
+            alt.Chart(df)
+            .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+            .encode(
+                x=alt.X("count():Q", title="Sightings"),
+                y=alt.Y("primary_fur_color:N", title=None, sort="-x"),
+                color=alt.Color(
+                    "primary_fur_color:N", 
+                    scale=alt.Scale(domain=FUR_ORDER, range=FUR_COLOURS), 
+                    legend=None),
+                tooltip=[alt.Tooltip("primary_fur_color:N", title="Fur Color"), alt.Tooltip("count():Q", title="Count")],
+            )
+            .properties(height=160, width="container")
+        )
+        return chart_html(chart, element_id="ai_fur_chart")
+    
+    @output
+    @render.ui
+    def ai_shift_chart():
+        df = pd.DataFrame(qc_vals.df())
+        if df.empty or "shift" not in df.columns:
+            return ui.em("No data.")
+        chart = (
+            alt.Chart(df)
+            .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+            .encode(
+                x=alt.X("count():Q", title="Sightings"),
+                y=alt.Y("shift:N", title=None, sort=SHIFT_ORDER),
+                color=alt.Color("shift:N", scale=alt.Scale(domain=SHIFT_ORDER, range=SHIFT_COLOURS), legend=None),
+                tooltip=[alt.Tooltip("shift:N", title="Shift"), alt.Tooltip("count():Q", title="Count")],
+            )
+            .properties(height=160, width="container")
+        )
+        return chart_html(chart, element_id="ai_shift_chart")
+    
+    @output
+    @render.ui
+    def ai_behavior_chart():
+        df = pd.DataFrame(qc_vals.df())
+        if df.empty:
+            return ui.em("No data.")
+        cols = [c for c in BEHAVIOR_COLS if c in df.columns]
+        if not cols:
+            return ui.em("No behavior data.")
+        counts = df[cols].apply(lambda s: s.eq(True).sum()).reset_index()
+        counts.columns = ["behavior", "count"]
+        counts = counts.nlargest(5, "count")
+        counts["behavior"] = counts["behavior"].str.replace("_", " ").str.title()
+        chart = (
+            alt.Chart(counts)
+            .mark_bar()
+            .encode(
+                x=alt.X("count:Q", title="Sightings"),
+                y=alt.Y("behavior:N", title="Behavior", sort="-x"),
+                color=alt.value(BEHAVIOUR_COLOUR),
+            )
+            .properties(height=150, width=240)
+        )
+        return chart_html(chart, element_id="ai_behavior_chart_elem")
+    # ── Tab 2: filtered data table ────────────────────────────────────────────
+    @output
+    @render.data_frame
+    def ai_table_view():
+        df = pd.DataFrame(qc_vals.df())
+        if df.empty:
+            return render.DataGrid(pd.DataFrame({"message": ["No rows for current filters"]}))
+        # longitude/latitude already exist as plain columns in _chat_base_df
+        cols = ["unique_squirrel_id", "date_clean", "shift", "age", "primary_fur_color",
+                "hectare", "longitude", "latitude"] + BEHAVIOR_COLS
+        available = [c for c in cols if c in df.columns]
+        table_df = df[available].rename(columns={"date_clean": "date"})
+        return render.DataGrid(table_df, filters=True, height="340px")
+
+    @render.download(filename="squirrel_chat_filtered.csv")
+    def download_csv_ai():
+        yield pd.DataFrame(qc_vals.df()).to_csv(index=False)
+
 
 app = App(app_ui, server, static_assets={"/img": PROJECT_ROOT / "img"})
