@@ -36,6 +36,7 @@ Central Park has thousands of squirrel sightings across space, time, and traits.
 ```bash
 conda env create -f environment.yml
 conda activate squirrels
+pip install -r requirements.txt
 shiny run src/app.py
 ```
 
