@@ -10,6 +10,8 @@ import altair as alt
 import folium
 import geopandas as gpd
 import pandas as pd
+from chatlas import ChatGithub
+from dotenv import load_dotenv
 from querychat import QueryChat
 from pyproj import datadir as pyproj_datadir
 from shiny import App, reactive, render, ui
@@ -33,6 +35,7 @@ AGE_COLOURS = ["#E07B54", "#7BB8E0", "#A0A0A0"]
 
 APP_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = APP_DIR.parent
+load_dotenv(PROJECT_ROOT / ".env")
 RAW_DATA_DIR = PROJECT_ROOT / "data" / "raw"
 geojson_files = sorted(glob.glob(str(RAW_DATA_DIR / "*.geojson")))
 
@@ -161,7 +164,7 @@ _chat_base_df["latitude"]  = initial.geometry.y.values
 qc = QueryChat(
     _chat_base_df,
     "squirrels",
-    client="anthropic/claude-sonnet-4-5",
+    client=ChatGithub(model="gpt-4.1"),
     )
 # ── UI ───────────────────────────────────────────────────────────────────────
 
