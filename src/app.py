@@ -1,30 +1,27 @@
 from __future__ import annotations
 
-import glob
 import html
 import json
-import os
 from pathlib import Path
 
 import altair as alt
 import folium
-import geopandas as gpd
 import pandas as pd
 from chatlas import ChatGithub
 from dotenv import load_dotenv
 from querychat import QueryChat
-from pyproj import datadir as pyproj_datadir
 from shiny import App, reactive, render, ui
 
-BEHAVIOR_COLS = [
-    "running",
-    "chasing",
-    "climbing",
-    "eating",
-    "foraging"
-]
-BEHAVIOUR_COLOUR = "#6A9E6F"
+from data_processing import (
+    BEHAVIOR_COLS,
+    OUT_GEOJSON,
+    load_geojson,
+    to_flat_df,
+)
 
+# ── Config ────────────────────────────────────────────────────────────────────
+
+BEHAVIOUR_COLOUR = "#6A9E6F"
 DEFAULT_CENTER = (40.78204, -73.96399)
 DEFAULT_ZOOM = 14
 FUR_COLOURS = ["#808080", "#A66A3F", "#000000"]
@@ -36,53 +33,23 @@ AGE_COLOURS = ["#E07B54", "#7BB8E0", "#A0A0A0"]
 APP_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = APP_DIR.parent
 load_dotenv(PROJECT_ROOT / ".env")
-RAW_DATA_DIR = PROJECT_ROOT / "data" / "raw"
-geojson_files = sorted(glob.glob(str(RAW_DATA_DIR / "*.geojson")))
 
-if not geojson_files:
-    raise RuntimeError("No .geojson file found in data/raw.")
-DEFAULT_GEOJSON = geojson_files[0]
+# ── Bootstrap: load already-cleaned processed GeoJSON ────────────────────────
 
+initial      = load_geojson(PROJECT_ROOT / OUT_GEOJSON)
+all_shift    = sorted(initial["shift"].dropna().unique().tolist())
+all_fur      = sorted(initial["primary_fur_color"].dropna().unique().tolist())
+all_age      = sorted(initial["age"].dropna().unique().tolist())
+ 
+_chat_base_df = to_flat_df(initial)
+ 
+qc = QueryChat(
+    _chat_base_df,
+    "squirrels",
+    client=ChatGithub(model="gpt-4.1"),
+)
 
-def to_bool(series: pd.Series) -> pd.Series:
-    if series.dtype == bool:
-        return series.fillna(False)
-    normalized = series.astype(str).str.strip().str.lower()
-    return normalized.isin({"true", "t", "1", "yes"}).fillna(False)
-
-
-def load_geojson(path: str) -> gpd.GeoDataFrame:
-    conda_prefix = os.environ.get("CONDA_PREFIX")
-    if conda_prefix:
-        proj_dir = Path(conda_prefix) / "share" / "proj"
-        if proj_dir.exists():
-            pyproj_datadir.set_data_dir(str(proj_dir))
-
-    try:
-        # Posit Connect Cloud includes pyogrio by default; prefer it there.
-        gdf = gpd.read_file(path)
-    except Exception:
-        # Local fallback when pyogrio/proj stack is inconsistent.
-        gdf = gpd.read_file(path, engine="fiona")
-    required = ["shift", "primary_fur_color", "age", "date", "hectare", "unique_squirrel_id"]
-
-    for col in required:
-        if col not in gdf.columns:
-            gdf[col] = "Unknown"
-    for col in BEHAVIOR_COLS:
-        if col not in gdf.columns:
-            gdf[col] = False
-        gdf[col] = to_bool(gdf[col])
-
-    gdf["shift"] = gdf["shift"].fillna("Unknown")
-    gdf["primary_fur_color"] = gdf["primary_fur_color"].fillna("Unknown")
-    gdf["age"] = gdf["age"].fillna("Unknown")
-    gdf["date_clean"] = pd.to_datetime(gdf["date"].astype(str), format="%m%d%Y", errors="coerce")
-
-    if gdf.crs is not None:
-        gdf = gdf.to_crs(epsg=4326)
-    return gdf
-
+# ── Presentation helpers ──────────────────────────────────────────────────────
 
 def color_for_fur(fur: str) -> str:
     palette = {
@@ -110,7 +77,7 @@ def chart_html(chart: alt.Chart, element_id: str) -> ui.Tag:
     )
 
 
-def map_html(filtered: gpd.GeoDataFrame, tile_choice: str) -> str:
+def map_html(filtered, tile_choice: str) -> str:
     fmap = folium.Map(
         location=DEFAULT_CENTER,
         zoom_start=DEFAULT_ZOOM,
@@ -151,21 +118,6 @@ def map_html(filtered: gpd.GeoDataFrame, tile_choice: str) -> str:
 
     return fmap.get_root().render()
 
-
-initial = load_geojson(DEFAULT_GEOJSON)
-all_shift = sorted(initial["shift"].dropna().unique().tolist())
-all_fur = sorted(initial["primary_fur_color"].dropna().unique().tolist())
-all_age = sorted(initial["age"].dropna().unique().tolist())
-
-_chat_base_df = pd.DataFrame(initial.drop(columns="geometry"))
-_chat_base_df["longitude"] = initial.geometry.x.values
-_chat_base_df["latitude"]  = initial.geometry.y.values
-
-qc = QueryChat(
-    _chat_base_df,
-    "squirrels",
-    client=ChatGithub(model="gpt-4.1"),
-    )
 # ── UI ───────────────────────────────────────────────────────────────────────
 
 app_ui = ui.page_fluid(
@@ -398,7 +350,7 @@ def server(input, output, session):
 
     # ── Tab 1 outputs and calculations ─────────────────────────────────────────────────
     @reactive.calc
-    def filtered_df() -> gpd.GeoDataFrame:
+    def filtered_df():
         dat = _gdf.get()
         selected_shift = input.shift() or []
         selected_fur = input.fur() or []
