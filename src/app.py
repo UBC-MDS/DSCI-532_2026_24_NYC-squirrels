@@ -176,21 +176,20 @@ app_ui = ui.page_fluid(
             ui.layout_sidebar(
 
                 ui.sidebar(
-                    ui.input_selectize("shift", "Shift", choices=all_shift, selected=all_shift, multiple=True),
-                    ui.input_selectize("fur", "Primary Fur Color", choices=all_fur, selected=all_fur, multiple=True),
-                    ui.input_selectize("age", "Age", choices=all_age, selected=all_age, multiple=True),
+                    ui.input_checkbox_group("shift", "Shift", choices=all_shift, selected=all_shift),
+                    ui.input_checkbox_group("fur", "Primary Fur Color", choices=all_fur, selected=all_fur),
+                    ui.input_checkbox_group("age", "Age", choices=all_age, selected=all_age),
                     ui.input_select(
                         "basemap",
                         "Map Theme",
                         choices=["OpenStreetMap", "CartoDB positron", "CartoDB dark_matter"],
                         selected="OpenStreetMap",
                     ),
-                    ui.input_selectize(
+                    ui.input_checkbox_group(
                         "behavior_any", 
                         "Behavior", 
-                        choices=BEHAVIOR_COLS, 
-                        selected=[], 
-                        multiple=True
+                        choices={col: col.replace("_", " ").title() for col in BEHAVIOR_COLS}, 
+                        selected=[]
                         ),
 
                 ),
