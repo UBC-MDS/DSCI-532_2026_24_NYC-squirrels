@@ -424,7 +424,7 @@ def server(input, output, session):
                     legend=None,
                 ),
             )
-            .properties(height=60, width=220)
+            .properties(height=60, width="container")
         )
         return chart_html(chart, element_id="fur_color_hist_chart")
 
@@ -447,7 +447,7 @@ def server(input, output, session):
                     legend=None,
                 ),
             )
-            .properties(height=60, width=220)
+            .properties(height=60, width="container")
         )
         return chart_html(chart, element_id="shift_hist_chart")
 
@@ -479,7 +479,7 @@ def server(input, output, session):
                 y=alt.Y("behavior:N", title="Behavior", sort="-x"),
                 color=alt.value(BEHAVIOUR_COLOUR),
             )
-            .properties(height=60, width=220)
+            .properties(height=60, width="container")
         )
 
         return chart_html(chart, element_id="behavior_hist_chart")
@@ -581,7 +581,7 @@ def server(input, output, session):
                 y=alt.Y("behavior:N", title="Behavior", sort="-x"),
                 color=alt.value(BEHAVIOUR_COLOUR),
             )
-            .properties(height=150, width=240)
+            .properties(height=160, width="container")
         )
         return chart_html(chart, element_id="ai_behavior_chart_elem")
     # ── Tab 2: filtered data table ────────────────────────────────────────────
