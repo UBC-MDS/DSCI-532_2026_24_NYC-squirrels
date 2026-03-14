@@ -11,10 +11,13 @@ from chatlas import ChatGithub
 from dotenv import load_dotenv
 from querychat import QueryChat
 from shiny import App, reactive, render, ui
+import duckdb
+import geopandas as gpd
 
 from data_processing import (
     BEHAVIOR_COLS,
     OUT_GEOJSON,
+    OUT_PAR,
     load_geojson,
     to_flat_df,
 )
@@ -33,15 +36,16 @@ AGE_COLOURS = ["#E07B54", "#7BB8E0", "#A0A0A0"]
 APP_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = APP_DIR.parent
 load_dotenv(PROJECT_ROOT / ".env")
+con = duckdb.connect()
+con.execute(f"CREATE VIEW squirrels AS SELECT * FROM read_parquet('{OUT_PAR}')")
 
 # ── Bootstrap: load already-cleaned processed GeoJSON ────────────────────────
 
-initial      = load_geojson(PROJECT_ROOT / OUT_GEOJSON)
-all_shift    = sorted(initial["shift"].dropna().unique().tolist())
-all_fur      = sorted(initial["primary_fur_color"].dropna().unique().tolist())
-all_age      = sorted(initial["age"].dropna().unique().tolist())
- 
-_chat_base_df = to_flat_df(initial)
+_gdf     = load_geojson(PROJECT_ROOT / OUT_GEOJSON)
+all_shift = con.execute("SELECT DISTINCT shift FROM squirrels ORDER BY shift").df()["shift"].tolist()
+all_fur   = con.execute("SELECT DISTINCT primary_fur_color FROM squirrels ORDER BY primary_fur_color").df()["primary_fur_color"].tolist()
+all_age   = con.execute("SELECT DISTINCT age FROM squirrels ORDER BY age").df()["age"].tolist()
+_chat_base_df = to_flat_df(_gdf)
  
 qc = QueryChat(
     _chat_base_df,
@@ -182,12 +186,13 @@ app_ui = ui.page_fluid(
                         selected="OpenStreetMap",
                     ),
                     ui.input_selectize(
-                        "behavior_any",
-                        "Behavior",
-                        choices=[],
-                        selected=[],
-                        multiple=True,
-                    ),
+                        "behavior_any", 
+                        "Behavior", 
+                        choices=BEHAVIOR_COLS, 
+                        selected=[], 
+                        multiple=True
+                        ),
+
                 ),
 
                 ui.div(
@@ -345,46 +350,46 @@ app_ui = ui.page_fluid(
 )  
 
 def server(input, output, session):
-    _gdf = reactive.Value(initial)
     qc_vals = qc.server()
 
     # ── Tab 1 outputs and calculations ─────────────────────────────────────────────────
     @reactive.calc
-    def filtered_df():
-        dat = _gdf.get()
-        selected_shift = input.shift() or []
-        selected_fur = input.fur() or []
-        selected_age = input.age() or []
-        selected_behavior = input.behavior_any() or []
+    def filtered_df() -> pd.DataFrame:
+        selected_shift    = list(input.shift()        or [])
+        selected_fur      = list(input.fur()          or [])
+        selected_age      = list(input.age()          or [])
+        selected_behavior = list(input.behavior_any() or [])
 
-        out = dat.copy()
-        
+        conditions = []
         if selected_shift:
-            out = out[out["shift"].isin(selected_shift)]
-        
+            placeholders = ", ".join(f"'{v}'" for v in selected_shift)
+            conditions.append(f"shift IN ({placeholders})")
         if selected_fur:
-            out = out[out["primary_fur_color"].isin(selected_fur)]
-            
+            placeholders = ", ".join(f"'{v}'" for v in selected_fur)
+            conditions.append(f"primary_fur_color IN ({placeholders})")
         if selected_age:
-            out = out[out["age"].isin(selected_age)]
+            placeholders = ", ".join(f"'{v}'" for v in selected_age)
+            conditions.append(f"age IN ({placeholders})")
+        valid_behavior = [c for c in selected_behavior if c in BEHAVIOR_COLS]
+        if valid_behavior:
+            behavior_clause = " OR ".join(f"{c} = TRUE" for c in valid_behavior)
+            conditions.append(f"({behavior_clause})")
 
-        if selected_behavior:
-            cols = [c for c in selected_behavior if c in out.columns]
-            if cols:
-                mask = pd.Series(False, index=out.index)
-                for c in cols:
-                    mask = mask | out[c].fillna(False)
-                out = out[mask]
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        query = f"""
+            SELECT
+                unique_squirrel_id, date, shift, age,
+                primary_fur_color, hectare,
+                {', '.join(BEHAVIOR_COLS)}
+            FROM squirrels
+            {where}
+        """
+        return con.execute(query).df()
 
-        return out
-
-    @reactive.effect
-    def _update_filter_choices():
-        df = _gdf.get()
-        behavior_cols = [c for c in BEHAVIOR_COLS if c in df.columns]
-        current = input.behavior_any() or []
-        selected = [v for v in current if v in behavior_cols]
-        ui.update_selectize("behavior_any", choices=behavior_cols, selected=selected, session=session)
+    @reactive.calc
+    def filtered_gdf() -> gpd.GeoDataFrame:
+        ids = set(filtered_df()["unique_squirrel_id"])
+        return _gdf[_gdf["unique_squirrel_id"].isin(ids)]
 
     @output
     @render.text
@@ -394,7 +399,7 @@ def server(input, output, session):
     @output
     @render.ui
     def map_view():
-        html_str = map_html(filtered_df(), input.basemap())
+        html_str = map_html(filtered_gdf(), input.basemap())
         return ui.tags.iframe(
             srcdoc=html_str,
             style="height: 100%; min-height: 480px; width: 100%; border: 0;",
@@ -486,11 +491,9 @@ def server(input, output, session):
         if df.empty:
             return render.DataGrid(pd.DataFrame({"message": ["No rows for current filters"]}))
 
-        df["longitude"] = df.geometry.x
-        df["latitude"] = df.geometry.y
         cols = [
             "unique_squirrel_id",
-            "date_clean",
+            "date",
             "shift",
             "age",
             "primary_fur_color",
@@ -504,12 +507,7 @@ def server(input, output, session):
 
     @render.download(filename="squirrel_report.csv")
     def download_csv():
-        df_to_save = filtered_df().copy()
-
-        if "geometry" in df_to_save.columns:
-            df_to_save = pd.DataFrame(df_to_save.drop(columns="geometry"))
-    
-        yield df_to_save.to_csv(index=False)
+        yield filtered_df().to_csv(index=False)
 
     # ── Tab 2 outputs: charts ─────────────────────────────────────────────────
     @output
