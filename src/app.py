@@ -181,7 +181,7 @@ app_ui = ui.page_fluid(
                     ui.input_selectize("age", "Age", choices=all_age, selected=all_age, multiple=True),
                     ui.input_select(
                         "basemap",
-                        "Basemap",
+                        "Map Theme",
                         choices=["OpenStreetMap", "CartoDB positron", "CartoDB dark_matter"],
                         selected="OpenStreetMap",
                     ),
