@@ -6,13 +6,23 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Clickable map legend that allows for fur colour selection and updates outputs (as well as checkboxes) [PR #...]
+
 -   <!-- New features, components, tests - one line each. Reference PRs where relevant (e.g. #12). -->
 
 ### Changed
 
--   data cleaning moved from `eda.ipynb` and `app.py` to new `data_processing.py` script to improve read
+-   Data cleaning moved from `eda.ipynb` and `app.py` to new `data_processing.py` script to improve read
 
 -   DuckDB and Parquet implemented into `app.py`
+
+-   Addressed: Use checkboxed rather than selectize for filters (#...)
+
+-   Addressed: Convert the behaviour filter to multi-select pill like the other filters (#...)
+
+-   Addressed: Make the basemap selector more intuitive (#...)
+
+-   Addressed: Adjust chart width to remove whitespace (#...)
 
 -   <!-- Spec or design deviations, and motivation. -->
 
@@ -22,20 +32,20 @@ All notable changes to this project are documented in this file.
 
 -   <!-- Bugs resolved since M3. -->
 
--   **Feedback prioritization issue link:** #...
+-   **Feedback prioritization issue link:** #88
 
 ### Known Issues
 
 -   <!-- Anything incomplete or broken TAs should be aware of (so it isn't mistaken for unfinished work). -->
 
-### Release Highlight: [Name of your advanced feature]
+### Release Highlight: [Component Click Event Interaction]
 
 <!-- One short paragraph describing what you built and what it does for the user. -->
 
--   **Option chosen:** A / B / C / D
+-   **Option chosen:** D
 -   **PR:** #...
--   **Why this option over the others:** <!-- 1–2 sentences; link to your feature prioritization issue -->
--   **Feature prioritization issue link:** #...
+-   **Why this option over the others:** As our Querychat has performed well thus far, we opted to add a component click event interaction to make our map feel more interactive. We chose this path over LLM logging as we feel the map is the cornerstone of our dashboard, and improving it provides more value to its users.
+-   **Feature prioritization issue link:** #113
 
 ### Collaboration
 
