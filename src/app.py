@@ -81,7 +81,7 @@ def chart_html(chart: alt.Chart, element_id: str) -> ui.Tag:
     )
 
 
-def map_html(filtered, tile_choice: str) -> str:
+def map_html(filtered, tile_choice: str, selected_fur: list) -> str:
     fmap = folium.Map(
         location=DEFAULT_CENTER,
         zoom_start=DEFAULT_ZOOM,
@@ -120,6 +120,76 @@ def map_html(filtered, tile_choice: str) -> str:
         minx, miny, maxx, maxy = filtered.total_bounds
         fmap.fit_bounds([[miny, minx], [maxy, maxx]])
 
+    fur_palette = {"Gray": "#808080", "Cinnamon": "#B87333", "Black": "#1F1F1F"}
+    all_fur_keys = list(fur_palette.keys())
+    selected_json = json.dumps(selected_fur)
+    all_fur_json  = json.dumps(all_fur_keys)
+
+    legend_items_html = "".join(
+        f"""
+        <div class="legend-item" data-fur="{name}"
+             style="display:flex; align-items:center; gap:7px; padding:4px 6px;
+                    border-radius:5px; cursor:pointer; transition:background 0.15s;
+                    background: {'rgba(255,255,255,0.25)' if name in selected_fur else 'transparent'};">
+            <span style="display:inline-block; width:13px; height:13px; border-radius:50%;
+                         background:{color}; flex-shrink:0;
+                         opacity:{'1' if name in selected_fur else '0.35'};"></span>
+            <span style="font-size:12px; font-weight:500;
+                         opacity:{'1' if name in selected_fur else '0.45'}">{name}</span>
+        </div>
+        """
+        for name, color in fur_palette.items()
+    )
+
+    legend_html = f"""
+    <div id="fur-legend"
+         style="position:absolute; top:12px; right:12px; z-index:9999;
+                background:rgba(255,255,255,0.88); backdrop-filter:blur(4px);
+                border-radius:8px; padding:8px 10px; box-shadow:0 2px 8px rgba(0,0,0,0.18);
+                min-width:110px; user-select:none;">
+        <div style="font-size:11px; font-weight:700; color:#444;
+                    margin-bottom:5px; letter-spacing:0.04em;">FUR COLOR</div>
+        {legend_items_html}
+    </div>
+
+    <script>
+    (function() {{
+        var selected = {selected_json};
+        var allFur   = {all_fur_json};
+
+        function updateVisuals() {{
+            document.querySelectorAll('.legend-item').forEach(function(el) {{
+                var fur = el.getAttribute('data-fur');
+                var active = selected.indexOf(fur) >= 0;
+                el.style.background = active ? 'rgba(255,255,255,0.25)' : 'transparent';
+                el.querySelectorAll('span').forEach(function(s, i) {{
+                    s.style.opacity = active ? '1' : (i === 0 ? '0.35' : '0.45');
+                }});
+            }});
+        }}
+
+        document.querySelectorAll('.legend-item').forEach(function(el) {{
+            el.addEventListener('click', function() {{
+                var fur = el.getAttribute('data-fur');
+                var idx = selected.indexOf(fur);
+                if (idx >= 0) {{
+                    // Don't allow deselecting all
+                    if (selected.length > 1) selected.splice(idx, 1);
+                }} else {{
+                    selected.push(fur);
+                }}
+                updateVisuals();
+                // Push new value into Shiny input 'fur'
+                if (window.parent && window.parent.Shiny) {{
+                    window.parent.Shiny.setInputValue('fur', selected, {{priority: 'event'}});
+                }}
+            }});
+        }});
+    }})();
+    </script>
+    """
+
+    fmap.get_root().html.add_child(folium.Element(legend_html))
     return fmap.get_root().render()
 
 # ── UI ───────────────────────────────────────────────────────────────────────
@@ -129,6 +199,11 @@ app_ui = ui.page_fluid(
         ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega@5"),
         ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega-lite@5"),
         ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega-embed@6"),
+        ui.tags.script("""
+        Shiny.addCustomMessageHandler("set_fur_filter", function(colors) {
+            Shiny.setInputValue("fur", colors, {priority: "event"});
+        });
+        """),
     ),
     # ── Hero banner ──────────────────────────────────────────────────────────
     ui.tags.div(
@@ -398,11 +473,15 @@ def server(input, output, session):
     @output
     @render.ui
     def map_view():
-        html_str = map_html(filtered_gdf(), input.basemap())
+        html_str = map_html(filtered_gdf(), input.basemap(), list(input.fur()))
         return ui.tags.iframe(
             srcdoc=html_str,
             style="height: 100%; min-height: 480px; width: 100%; border: 0;",
         )
+    
+    @reactive.effect
+    def _sync_fur_checkbox():
+        ui.update_checkbox_group("fur", selected=list(input.fur()))
 
     @output
     @render.ui
