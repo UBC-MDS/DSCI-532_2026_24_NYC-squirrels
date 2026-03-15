@@ -1,30 +1,30 @@
 from __future__ import annotations
 
-import glob
 import html
 import json
-import os
 from pathlib import Path
 
 import altair as alt
 import folium
-import geopandas as gpd
 import pandas as pd
 from chatlas import ChatGithub
 from dotenv import load_dotenv
 from querychat import QueryChat
-from pyproj import datadir as pyproj_datadir
 from shiny import App, reactive, render, ui
+import duckdb
+import geopandas as gpd
 
-BEHAVIOR_COLS = [
-    "running",
-    "chasing",
-    "climbing",
-    "eating",
-    "foraging"
-]
+from data_processing import (
+    BEHAVIOR_COLS,
+    OUT_GEOJSON,
+    OUT_PAR,
+    load_geojson,
+    to_flat_df,
+)
+
+# ── Config ────────────────────────────────────────────────────────────────────
+
 BEHAVIOUR_COLOUR = "#6A9E6F"
-
 DEFAULT_CENTER = (40.78204, -73.96399)
 DEFAULT_ZOOM = 14
 FUR_COLOURS = ["#808080", "#A66A3F", "#000000"]
@@ -36,53 +36,24 @@ AGE_COLOURS = ["#E07B54", "#7BB8E0", "#A0A0A0"]
 APP_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = APP_DIR.parent
 load_dotenv(PROJECT_ROOT / ".env")
-RAW_DATA_DIR = PROJECT_ROOT / "data" / "raw"
-geojson_files = sorted(glob.glob(str(RAW_DATA_DIR / "*.geojson")))
+con = duckdb.connect()
+con.execute(f"CREATE VIEW squirrels AS SELECT * FROM read_parquet('{OUT_PAR}')")
 
-if not geojson_files:
-    raise RuntimeError("No .geojson file found in data/raw.")
-DEFAULT_GEOJSON = geojson_files[0]
+# ── Bootstrap: load already-cleaned processed GeoJSON ────────────────────────
 
+_gdf     = load_geojson(PROJECT_ROOT / OUT_GEOJSON)
+all_shift = con.execute("SELECT DISTINCT shift FROM squirrels ORDER BY shift").df()["shift"].tolist()
+all_fur   = con.execute("SELECT DISTINCT primary_fur_color FROM squirrels ORDER BY primary_fur_color").df()["primary_fur_color"].tolist()
+all_age   = con.execute("SELECT DISTINCT age FROM squirrels ORDER BY age").df()["age"].tolist()
+_chat_base_df = to_flat_df(_gdf)
+ 
+qc = QueryChat(
+    _chat_base_df,
+    "squirrels",
+    client=ChatGithub(model="gpt-4.1"),
+)
 
-def to_bool(series: pd.Series) -> pd.Series:
-    if series.dtype == bool:
-        return series.fillna(False)
-    normalized = series.astype(str).str.strip().str.lower()
-    return normalized.isin({"true", "t", "1", "yes"}).fillna(False)
-
-
-def load_geojson(path: str) -> gpd.GeoDataFrame:
-    conda_prefix = os.environ.get("CONDA_PREFIX")
-    if conda_prefix:
-        proj_dir = Path(conda_prefix) / "share" / "proj"
-        if proj_dir.exists():
-            pyproj_datadir.set_data_dir(str(proj_dir))
-
-    try:
-        # Posit Connect Cloud includes pyogrio by default; prefer it there.
-        gdf = gpd.read_file(path)
-    except Exception:
-        # Local fallback when pyogrio/proj stack is inconsistent.
-        gdf = gpd.read_file(path, engine="fiona")
-    required = ["shift", "primary_fur_color", "age", "date", "hectare", "unique_squirrel_id"]
-
-    for col in required:
-        if col not in gdf.columns:
-            gdf[col] = "Unknown"
-    for col in BEHAVIOR_COLS:
-        if col not in gdf.columns:
-            gdf[col] = False
-        gdf[col] = to_bool(gdf[col])
-
-    gdf["shift"] = gdf["shift"].fillna("Unknown")
-    gdf["primary_fur_color"] = gdf["primary_fur_color"].fillna("Unknown")
-    gdf["age"] = gdf["age"].fillna("Unknown")
-    gdf["date_clean"] = pd.to_datetime(gdf["date"].astype(str), format="%m%d%Y", errors="coerce")
-
-    if gdf.crs is not None:
-        gdf = gdf.to_crs(epsg=4326)
-    return gdf
-
+# ── Presentation helpers ──────────────────────────────────────────────────────
 
 def color_for_fur(fur: str) -> str:
     palette = {
@@ -110,7 +81,7 @@ def chart_html(chart: alt.Chart, element_id: str) -> ui.Tag:
     )
 
 
-def map_html(filtered: gpd.GeoDataFrame, tile_choice: str) -> str:
+def map_html(filtered, tile_choice: str) -> str:
     fmap = folium.Map(
         location=DEFAULT_CENTER,
         zoom_start=DEFAULT_ZOOM,
@@ -151,21 +122,6 @@ def map_html(filtered: gpd.GeoDataFrame, tile_choice: str) -> str:
 
     return fmap.get_root().render()
 
-
-initial = load_geojson(DEFAULT_GEOJSON)
-all_shift = sorted(initial["shift"].dropna().unique().tolist())
-all_fur = sorted(initial["primary_fur_color"].dropna().unique().tolist())
-all_age = sorted(initial["age"].dropna().unique().tolist())
-
-_chat_base_df = pd.DataFrame(initial.drop(columns="geometry"))
-_chat_base_df["longitude"] = initial.geometry.x.values
-_chat_base_df["latitude"]  = initial.geometry.y.values
-
-qc = QueryChat(
-    _chat_base_df,
-    "squirrels",
-    client=ChatGithub(model="gpt-4.1"),
-    )
 # ── UI ───────────────────────────────────────────────────────────────────────
 
 app_ui = ui.page_fluid(
@@ -230,12 +186,13 @@ app_ui = ui.page_fluid(
                         selected="OpenStreetMap",
                     ),
                     ui.input_selectize(
-                        "behavior_any",
-                        "Behavior",
-                        choices=[],
-                        selected=[],
-                        multiple=True,
-                    ),
+                        "behavior_any", 
+                        "Behavior", 
+                        choices=BEHAVIOR_COLS, 
+                        selected=[], 
+                        multiple=True
+                        ),
+
                 ),
 
                 ui.div(
@@ -393,46 +350,46 @@ app_ui = ui.page_fluid(
 )  
 
 def server(input, output, session):
-    _gdf = reactive.Value(initial)
     qc_vals = qc.server()
 
     # ── Tab 1 outputs and calculations ─────────────────────────────────────────────────
     @reactive.calc
-    def filtered_df() -> gpd.GeoDataFrame:
-        dat = _gdf.get()
-        selected_shift = input.shift() or []
-        selected_fur = input.fur() or []
-        selected_age = input.age() or []
-        selected_behavior = input.behavior_any() or []
+    def filtered_df() -> pd.DataFrame:
+        selected_shift    = list(input.shift()        or [])
+        selected_fur      = list(input.fur()          or [])
+        selected_age      = list(input.age()          or [])
+        selected_behavior = list(input.behavior_any() or [])
 
-        out = dat.copy()
-        
+        conditions = []
         if selected_shift:
-            out = out[out["shift"].isin(selected_shift)]
-        
+            placeholders = ", ".join(f"'{v}'" for v in selected_shift)
+            conditions.append(f"shift IN ({placeholders})")
         if selected_fur:
-            out = out[out["primary_fur_color"].isin(selected_fur)]
-            
+            placeholders = ", ".join(f"'{v}'" for v in selected_fur)
+            conditions.append(f"primary_fur_color IN ({placeholders})")
         if selected_age:
-            out = out[out["age"].isin(selected_age)]
+            placeholders = ", ".join(f"'{v}'" for v in selected_age)
+            conditions.append(f"age IN ({placeholders})")
+        valid_behavior = [c for c in selected_behavior if c in BEHAVIOR_COLS]
+        if valid_behavior:
+            behavior_clause = " OR ".join(f"{c} = TRUE" for c in valid_behavior)
+            conditions.append(f"({behavior_clause})")
 
-        if selected_behavior:
-            cols = [c for c in selected_behavior if c in out.columns]
-            if cols:
-                mask = pd.Series(False, index=out.index)
-                for c in cols:
-                    mask = mask | out[c].fillna(False)
-                out = out[mask]
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        query = f"""
+            SELECT
+                unique_squirrel_id, date, shift, age,
+                primary_fur_color, hectare,
+                {', '.join(BEHAVIOR_COLS)}
+            FROM squirrels
+            {where}
+        """
+        return con.execute(query).df()
 
-        return out
-
-    @reactive.effect
-    def _update_filter_choices():
-        df = _gdf.get()
-        behavior_cols = [c for c in BEHAVIOR_COLS if c in df.columns]
-        current = input.behavior_any() or []
-        selected = [v for v in current if v in behavior_cols]
-        ui.update_selectize("behavior_any", choices=behavior_cols, selected=selected, session=session)
+    @reactive.calc
+    def filtered_gdf() -> gpd.GeoDataFrame:
+        ids = set(filtered_df()["unique_squirrel_id"])
+        return _gdf[_gdf["unique_squirrel_id"].isin(ids)]
 
     @output
     @render.text
@@ -442,7 +399,7 @@ def server(input, output, session):
     @output
     @render.ui
     def map_view():
-        html_str = map_html(filtered_df(), input.basemap())
+        html_str = map_html(filtered_gdf(), input.basemap())
         return ui.tags.iframe(
             srcdoc=html_str,
             style="height: 100%; min-height: 480px; width: 100%; border: 0;",
@@ -534,11 +491,9 @@ def server(input, output, session):
         if df.empty:
             return render.DataGrid(pd.DataFrame({"message": ["No rows for current filters"]}))
 
-        df["longitude"] = df.geometry.x
-        df["latitude"] = df.geometry.y
         cols = [
             "unique_squirrel_id",
-            "date_clean",
+            "date",
             "shift",
             "age",
             "primary_fur_color",
@@ -552,12 +507,7 @@ def server(input, output, session):
 
     @render.download(filename="squirrel_report.csv")
     def download_csv():
-        df_to_save = filtered_df().copy()
-
-        if "geometry" in df_to_save.columns:
-            df_to_save = pd.DataFrame(df_to_save.drop(columns="geometry"))
-    
-        yield df_to_save.to_csv(index=False)
+        yield filtered_df().to_csv(index=False)
 
     # ── Tab 2 outputs: charts ─────────────────────────────────────────────────
     @output
