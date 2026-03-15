@@ -16,8 +16,6 @@ import geopandas as gpd
 
 from data_processing import (
     BEHAVIOR_COLS,
-    OUT_GEOJSON,
-    OUT_PAR,
     load_geojson,
     to_flat_df,
 )
@@ -33,15 +31,26 @@ SHIFT_COLOURS = ["#D9C27A", "#5B87D9"]
 SHIFT_ORDER = ["AM", "PM"]
 AGE_COLOURS = ["#E07B54", "#7BB8E0", "#A0A0A0"]
 
-APP_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = APP_DIR.parent
+def get_project_root(marker=".env"):
+    path = Path(__file__).resolve()
+    for parent in [path, *path.parents]:
+        if (parent / marker).exists():
+            return parent
+    raise RuntimeError("Project root not found")
+
+PROJECT_ROOT = get_project_root()
+
 load_dotenv(PROJECT_ROOT / ".env")
+
+OUT_PAR = PROJECT_ROOT / "data" / "processed" / "squirrels.parquet"
+OUT_GEOJSON = PROJECT_ROOT / "data" / "processed" / "squirrels_clean.geojson"
+
 con = duckdb.connect()
 con.execute(f"CREATE VIEW squirrels AS SELECT * FROM read_parquet('{OUT_PAR}')")
 
 # ── Bootstrap: load already-cleaned processed GeoJSON ────────────────────────
 
-_gdf     = load_geojson(PROJECT_ROOT / OUT_GEOJSON)
+_gdf     = load_geojson(OUT_GEOJSON)
 all_shift = con.execute("SELECT DISTINCT shift FROM squirrels ORDER BY shift").df()["shift"].tolist()
 all_fur   = con.execute("SELECT DISTINCT primary_fur_color FROM squirrels ORDER BY primary_fur_color").df()["primary_fur_color"].tolist()
 all_age   = con.execute("SELECT DISTINCT age FROM squirrels ORDER BY age").df()["age"].tolist()
