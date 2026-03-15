@@ -176,21 +176,20 @@ app_ui = ui.page_fluid(
             ui.layout_sidebar(
 
                 ui.sidebar(
-                    ui.input_selectize("shift", "Shift", choices=all_shift, selected=all_shift, multiple=True),
-                    ui.input_selectize("fur", "Primary Fur Color", choices=all_fur, selected=all_fur, multiple=True),
-                    ui.input_selectize("age", "Age", choices=all_age, selected=all_age, multiple=True),
+                    ui.input_checkbox_group("shift", "Shift", choices=all_shift, selected=all_shift),
+                    ui.input_checkbox_group("fur", "Primary Fur Color", choices=all_fur, selected=all_fur),
+                    ui.input_checkbox_group("age", "Age", choices=all_age, selected=all_age),
                     ui.input_select(
                         "basemap",
-                        "Basemap",
+                        "Map Theme",
                         choices=["OpenStreetMap", "CartoDB positron", "CartoDB dark_matter"],
                         selected="OpenStreetMap",
                     ),
-                    ui.input_selectize(
+                    ui.input_checkbox_group(
                         "behavior_any", 
                         "Behavior", 
-                        choices=BEHAVIOR_COLS, 
-                        selected=[], 
-                        multiple=True
+                        choices={col: col.replace("_", " ").title() for col in BEHAVIOR_COLS}, 
+                        selected=[]
                         ),
 
                 ),
@@ -424,7 +423,7 @@ def server(input, output, session):
                     legend=None,
                 ),
             )
-            .properties(height=60, width=220)
+            .properties(height=60, width="container")
         )
         return chart_html(chart, element_id="fur_color_hist_chart")
 
@@ -447,7 +446,7 @@ def server(input, output, session):
                     legend=None,
                 ),
             )
-            .properties(height=60, width=220)
+            .properties(height=60, width="container")
         )
         return chart_html(chart, element_id="shift_hist_chart")
 
@@ -479,7 +478,7 @@ def server(input, output, session):
                 y=alt.Y("behavior:N", title="Behavior", sort="-x"),
                 color=alt.value(BEHAVIOUR_COLOUR),
             )
-            .properties(height=60, width=220)
+            .properties(height=60, width="container")
         )
 
         return chart_html(chart, element_id="behavior_hist_chart")
@@ -581,7 +580,7 @@ def server(input, output, session):
                 y=alt.Y("behavior:N", title="Behavior", sort="-x"),
                 color=alt.value(BEHAVIOUR_COLOUR),
             )
-            .properties(height=150, width=240)
+            .properties(height=160, width="container")
         )
         return chart_html(chart, element_id="ai_behavior_chart_elem")
     # ── Tab 2: filtered data table ────────────────────────────────────────────
