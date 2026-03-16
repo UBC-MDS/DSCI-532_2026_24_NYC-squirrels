@@ -11,8 +11,8 @@ from chatlas import ChatGithub
 from dotenv import load_dotenv
 from querychat import QueryChat
 from shiny import App, reactive, render, ui
-import duckdb
 import geopandas as gpd
+import duckdb
 
 from data_processing import (
     BEHAVIOR_COLS,
@@ -31,14 +31,8 @@ SHIFT_COLOURS = ["#D9C27A", "#5B87D9"]
 SHIFT_ORDER = ["AM", "PM"]
 AGE_COLOURS = ["#E07B54", "#7BB8E0", "#A0A0A0"]
 
-def get_project_root(marker=".env"):
-    path = Path(__file__).resolve()
-    for parent in [path, *path.parents]:
-        if (parent / marker).exists():
-            return parent
-    raise RuntimeError("Project root not found")
-
-PROJECT_ROOT = get_project_root()
+APP_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = APP_DIR.parent
 
 load_dotenv(PROJECT_ROOT / ".env")
 
@@ -46,7 +40,9 @@ OUT_PAR = PROJECT_ROOT / "data" / "processed" / "squirrels.parquet"
 OUT_GEOJSON = PROJECT_ROOT / "data" / "processed" / "squirrels_clean.geojson"
 
 con = duckdb.connect()
-con.execute(f"CREATE VIEW squirrels AS SELECT * FROM read_parquet('{OUT_PAR}')")
+con.execute(
+    f"CREATE VIEW squirrels AS SELECT * FROM read_parquet('{OUT_PAR.as_posix()}')"
+)
 
 # ── Bootstrap: load already-cleaned processed GeoJSON ────────────────────────
 
@@ -382,7 +378,7 @@ def server(input, output, session):
         if valid_behavior:
             behavior_clause = " OR ".join(f"{c} = TRUE" for c in valid_behavior)
             conditions.append(f"({behavior_clause})")
-
+ 
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         query = f"""
             SELECT
