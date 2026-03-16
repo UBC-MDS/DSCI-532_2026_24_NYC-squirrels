@@ -14,9 +14,8 @@ All notable changes to this project are documented in this file.
 
 -   DuckDB and Parquet implemented into `app.py`
 
--   <!-- Spec or design deviations, and motivation. -->
+- AI tab UI redesigned with chat feature as a fixed-height scrollable left sidebar (#96)
 
--   <!-- Feedback items you addressed: "Addressed: <item description> (#<prioritization issue>) via #<PR>" -->
 
 ### Fixed
 

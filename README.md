@@ -1,9 +1,3 @@
----
-editor_options: 
-  markdown: 
-    wrap: 72
----
-
 # DSCI-532_2026_24_NYC-squirrels
 
 ## Project Summary
@@ -17,8 +11,9 @@ activities, vocalizations, and physical traits. By providing a spatial
 overview of behavioral "hotspots" — such as areas where squirrels are
 most likely to approach humans or engage in rare vocalizations — the
 dashboard facilitates targeted wildlife observation and enhances the
-experience for tourists seeking unique squirrel encounters. \## For
-Users
+experience for tourists seeking unique squirrel encounters. 
+
+## For Users
 
 ### Motivation
 
@@ -32,6 +27,37 @@ seen and how patterns differ by fur color, age, and shift.
 -   Supports filtering to focus on specific squirrel groups.
 -   Summarizes key patterns with fur color and shift count charts.
 -   Provides a table view for exact records.
+
+### How to use the dashboard
+
+The dashboard has two tabs: Map and AI Analysis.
+
+#### Map tab
+
+The left sidebar lets you filter the map and charts by:
+
+- Shift — AM or PM sightings
+- Primary Fur Color — Gray, Cinnamon, Black, or Unknown
+- Age — Adult, Juvenile, Unknown
+- Map Theme — choose between OpenStreetMap, CartoDB light, or CartoDB dark
+- Behavior — filter to squirrels observed running, chasing, climbing, eating, or foraging
+
+The main panel shows:
+
+- An interactive map of Central Park with color-coded squirrel sighting markers. Hover over a marker to see details like ID, hectare, shift, fur color, age, and date.
+- A clickable legend on the map that allows you to filter the fur color.
+- Fur Color Counts, Shift Counts, and Top 5 Behaviors charts that update live as you adjust the filters.
+- A Filtered Data Table at the bottom with all matching records, plus a Download button to export as CSV.
+
+#### AI Analysis tab
+
+The left panel is an AI chatbot you can use to filter and explore the data using natural language. Try prompts like:
+
+- *"Show only gray squirrels observed in the AM shift"*
+- *"Which hectare has the most squirrel sightings?"*
+- *"Filter to adult squirrels that were foraging"*
+
+The chatbot updates the Fur Color Counts, Shift Counts, and Top 5 Behaviors charts on the right based on your query. The Chat-Filtered Dataset table below shows the matching records, which you can also export as CSV.
 
 ### Deployed app
 
