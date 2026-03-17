@@ -57,7 +57,17 @@ qc = QueryChat(
     _chat_base_df,
     "squirrels",
     client=ChatGithub(model="gpt-4.1"),
-    greeting="Hello! How can I help you analyze the squirrels?"
+    greeting="""
+Hello! I can help you explore the **2018 Central Park Squirrel Census**. Try one of these:
+
+**Filter the data:**
+- <span class="suggestion">Show only gray squirrels</span>
+- <span class="suggestion">Show adult squirrels that were foraging</span>
+
+**Ask questions:**
+- <span class="suggestion">Which fur color is most common?</span>
+- <span class="suggestion">How many juvenile vs adult squirrels were recorded?</span>
+"""
 )
 
 # ── Presentation helpers ──────────────────────────────────────────────────────
