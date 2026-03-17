@@ -49,13 +49,31 @@ demo](img/demo.png)](https://github.com/UBC-MDS/DSCI-532_2026_24_NYC-squirrels/b
 
 ### Install dependencies and run locally
 
+1. **Clone and set up the environment:**
+
 ``` bash
 conda env create -f environment.yml
 conda activate squirrels
 pip install -r requirements.txt
+```
+
+2. **(Optional) Configure AI features:**
+
+Create a `.env` file in the project root and add your OpenAI API key:
+
+``` bash
+cp .env.example .env
+# Edit .env and add your OPENAI_API_KEY
+```
+
+3. **Run the application:**
+
+``` bash
 python src/data_processing.py
 shiny run src/app.py
 ```
+
+The app will be available at `http://localhost:xxxx`
 
 ### Contribution guide
 
