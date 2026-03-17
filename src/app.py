@@ -1,5 +1,5 @@
 from __future__ import annotations
-from src.utils import color_for_fur, color_for_shift
+from utils import color_for_fur, color_for_shift
 
 import html
 import json
