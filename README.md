@@ -45,6 +45,13 @@ seen and how patterns differ by fur color, age, and shift.
 [![Watch dashboard
 demo](img/demo.png)](https://github.com/UBC-MDS/DSCI-532_2026_24_NYC-squirrels/blob/main/img/demo.mp4)
 
+### Using the Dashboard
+
+1. **Use filters** (left sidebar) to select specific squirrel traits
+2. **Explore the map** to see spatial distributions
+3. **Review charts** (right side) for patterns in fur color, shifts, and behaviors
+4. **Ask questions** in the Chat tab for AI-powered natural language queries
+
 ## For Contributors
 
 ### Install dependencies and run locally
