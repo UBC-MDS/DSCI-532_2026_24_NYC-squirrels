@@ -146,6 +146,8 @@ def map_html(filtered, tile_choice: str, selected_fur: list) -> str:
         for name, color in fur_palette.items()
     )
 
+    total_squirrels = len(filtered)
+    
     legend_html = f"""
     <div id="fur-legend"
          style="position:absolute; top:12px; right:12px; z-index:9999;
@@ -155,6 +157,11 @@ def map_html(filtered, tile_choice: str, selected_fur: list) -> str:
         <div style="font-size:11px; font-weight:700; color:#444;
                     margin-bottom:5px; letter-spacing:0.04em;">FUR COLOR</div>
         {legend_items_html}
+        
+        <div style="border-top:1px solid rgba(0,0,0,0.1); margin-top:8px; padding-top:8px;">
+            <div style="font-size:11px; color:#666; margin-bottom:2px;">Total Squirrels</div>
+            <div style="font-size:18px; font-weight:700; color:#6A9E6F;">{total_squirrels:,}</div>
+        </div>
     </div>
 
     <script>
@@ -257,12 +264,9 @@ app_ui = ui.page_fluid(
                 
                 
 
-
                 ui.sidebar(
                     ui.div(
                         ui.markdown("""
-                        **🐿️ Explore the Data**
-                        
                         Discover squirrel sightings from the 2018 Central Park Census.
                         Use filters to uncover behavioral patterns and spatial hotspots.
                         """),
