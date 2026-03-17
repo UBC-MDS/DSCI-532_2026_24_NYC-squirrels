@@ -12,3 +12,6 @@ plotly
 python-dotenv
 querychat
 chatlas
+duckdb
+pytest
+pytest-playwright

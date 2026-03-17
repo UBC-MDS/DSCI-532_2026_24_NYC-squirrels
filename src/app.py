@@ -1,30 +1,29 @@
 from __future__ import annotations
+from utils import color_for_fur, color_for_shift
 
-import glob
 import html
 import json
-import os
 from pathlib import Path
 
 import altair as alt
 import folium
-import geopandas as gpd
 import pandas as pd
 from chatlas import ChatGithub
 from dotenv import load_dotenv
 from querychat import QueryChat
-from pyproj import datadir as pyproj_datadir
 from shiny import App, reactive, render, ui
+import geopandas as gpd
+import duckdb
 
-BEHAVIOR_COLS = [
-    "running",
-    "chasing",
-    "climbing",
-    "eating",
-    "foraging"
-]
+from data_processing import (
+    BEHAVIOR_COLS,
+    load_geojson,
+    to_flat_df,
+)
+
+# ── Config ────────────────────────────────────────────────────────────────────
+
 BEHAVIOUR_COLOUR = "#6A9E6F"
-
 DEFAULT_CENTER = (40.78204, -73.96399)
 DEFAULT_ZOOM = 14
 FUR_COLOURS = ["#808080", "#A66A3F", "#000000"]
@@ -35,71 +34,43 @@ AGE_COLOURS = ["#E07B54", "#7BB8E0", "#A0A0A0"]
 
 APP_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = APP_DIR.parent
+
 load_dotenv(PROJECT_ROOT / ".env")
-RAW_DATA_DIR = PROJECT_ROOT / "data" / "raw"
-geojson_files = sorted(glob.glob(str(RAW_DATA_DIR / "*.geojson")))
 
-if not geojson_files:
-    raise RuntimeError("No .geojson file found in data/raw.")
-DEFAULT_GEOJSON = geojson_files[0]
+OUT_PAR = PROJECT_ROOT / "data" / "processed" / "squirrels.parquet"
+OUT_GEOJSON = PROJECT_ROOT / "data" / "processed" / "squirrels_clean.geojson"
 
+con = duckdb.connect()
+con.execute(
+    f"CREATE VIEW squirrels AS SELECT * FROM read_parquet('{OUT_PAR.as_posix()}')"
+)
 
-def to_bool(series: pd.Series) -> pd.Series:
-    if series.dtype == bool:
-        return series.fillna(False)
-    normalized = series.astype(str).str.strip().str.lower()
-    return normalized.isin({"true", "t", "1", "yes"}).fillna(False)
+# ── Bootstrap: load already-cleaned processed GeoJSON ────────────────────────
 
+_gdf     = load_geojson(OUT_GEOJSON)
+all_shift = con.execute("SELECT DISTINCT shift FROM squirrels ORDER BY shift").df()["shift"].tolist()
+all_fur   = con.execute("SELECT DISTINCT primary_fur_color FROM squirrels ORDER BY primary_fur_color").df()["primary_fur_color"].tolist()
+all_age   = con.execute("SELECT DISTINCT age FROM squirrels ORDER BY age").df()["age"].tolist()
+_chat_base_df = to_flat_df(_gdf)
+ 
+qc = QueryChat(
+    _chat_base_df,
+    "squirrels",
+    client=ChatGithub(model="gpt-4.1"),
+    greeting="""
+Hello! I can help you explore the **2018 Central Park Squirrel Census**. Try one of these:
 
-def load_geojson(path: str) -> gpd.GeoDataFrame:
-    conda_prefix = os.environ.get("CONDA_PREFIX")
-    if conda_prefix:
-        proj_dir = Path(conda_prefix) / "share" / "proj"
-        if proj_dir.exists():
-            pyproj_datadir.set_data_dir(str(proj_dir))
+**Filter the data:**
+- <span class="suggestion">Show only gray squirrels</span>
+- <span class="suggestion">Show adult squirrels that were foraging</span>
 
-    try:
-        # Posit Connect Cloud includes pyogrio by default; prefer it there.
-        gdf = gpd.read_file(path)
-    except Exception:
-        # Local fallback when pyogrio/proj stack is inconsistent.
-        gdf = gpd.read_file(path, engine="fiona")
-    required = ["shift", "primary_fur_color", "age", "date", "hectare", "unique_squirrel_id"]
+**Ask questions:**
+- <span class="suggestion">Which fur color is most common?</span>
+- <span class="suggestion">How many juvenile vs adult squirrels were recorded?</span>
+"""
+)
 
-    for col in required:
-        if col not in gdf.columns:
-            gdf[col] = "Unknown"
-    for col in BEHAVIOR_COLS:
-        if col not in gdf.columns:
-            gdf[col] = False
-        gdf[col] = to_bool(gdf[col])
-
-    gdf["shift"] = gdf["shift"].fillna("Unknown")
-    gdf["primary_fur_color"] = gdf["primary_fur_color"].fillna("Unknown")
-    gdf["age"] = gdf["age"].fillna("Unknown")
-    gdf["date_clean"] = pd.to_datetime(gdf["date"].astype(str), format="%m%d%Y", errors="coerce")
-
-    if gdf.crs is not None:
-        gdf = gdf.to_crs(epsg=4326)
-    return gdf
-
-
-def color_for_fur(fur: str) -> str:
-    palette = {
-        "Gray": "#808080",
-        "Cinnamon": "#B87333",
-        "Black": "#1F1F1F",
-        "Unknown": "#4AA3DF",
-    }
-    return palette.get(fur, "#6E8BAA")
-
-
-def color_for_shift(shift: str) -> str:
-    palette = {
-        "AM": "#D9C27A",
-        "PM": "#5B87D9"
-    }
-    return palette.get(shift, "#A0A0A0")
+# ── Presentation helpers ──────────────────────────────────────────────────────
 
 
 def chart_html(chart: alt.Chart, element_id: str) -> ui.Tag:
@@ -110,7 +81,7 @@ def chart_html(chart: alt.Chart, element_id: str) -> ui.Tag:
     )
 
 
-def map_html(filtered: gpd.GeoDataFrame, tile_choice: str) -> str:
+def map_html(filtered, tile_choice: str, selected_fur: list) -> str:
     fmap = folium.Map(
         location=DEFAULT_CENTER,
         zoom_start=DEFAULT_ZOOM,
@@ -149,23 +120,85 @@ def map_html(filtered: gpd.GeoDataFrame, tile_choice: str) -> str:
         minx, miny, maxx, maxy = filtered.total_bounds
         fmap.fit_bounds([[miny, minx], [maxy, maxx]])
 
+    fur_palette = {"Gray": "#808080", "Cinnamon": "#B87333", "Black": "#1F1F1F"}
+    all_fur_keys = list(fur_palette.keys())
+    selected_json = json.dumps(selected_fur)
+    all_fur_json  = json.dumps(all_fur_keys)
+
+    legend_items_html = "".join(
+        f"""
+        <div class="legend-item" data-fur="{name}"
+             style="display:flex; align-items:center; gap:7px; padding:4px 6px;
+                    border-radius:5px; cursor:pointer; transition:background 0.15s;
+                    background: {'rgba(255,255,255,0.25)' if name in selected_fur else 'transparent'};">
+            <span style="display:inline-block; width:13px; height:13px; border-radius:50%;
+                         background:{color}; flex-shrink:0;
+                         opacity:{'1' if name in selected_fur else '0.35'};"></span>
+            <span style="font-size:12px; font-weight:500;
+                         opacity:{'1' if name in selected_fur else '0.45'}">{name}</span>
+        </div>
+        """
+        for name, color in fur_palette.items()
+    )
+
+    total_squirrels = len(filtered)
+    
+    legend_html = f"""
+    <div id="fur-legend"
+         style="position:absolute; top:12px; right:12px; z-index:9999;
+                background:rgba(255,255,255,0.88); backdrop-filter:blur(4px);
+                border-radius:8px; padding:8px 10px; box-shadow:0 2px 8px rgba(0,0,0,0.18);
+                min-width:110px; user-select:none;">
+        <div style="font-size:11px; font-weight:700; color:#444;
+                    margin-bottom:5px; letter-spacing:0.04em;">FUR COLOR</div>
+        {legend_items_html}
+        
+        <div style="border-top:1px solid rgba(0,0,0,0.1); margin-top:8px; padding-top:8px;">
+            <div style="font-size:11px; color:#666; margin-bottom:2px;">Total Squirrels</div>
+            <div style="font-size:18px; font-weight:700; color:#6A9E6F;">{total_squirrels:,}</div>
+        </div>
+    </div>
+
+    <script>
+    (function() {{
+        var selected = {selected_json};
+        var allFur   = {all_fur_json};
+
+        function updateVisuals() {{
+            document.querySelectorAll('.legend-item').forEach(function(el) {{
+                var fur = el.getAttribute('data-fur');
+                var active = selected.indexOf(fur) >= 0;
+                el.style.background = active ? 'rgba(255,255,255,0.25)' : 'transparent';
+                el.querySelectorAll('span').forEach(function(s, i) {{
+                    s.style.opacity = active ? '1' : (i === 0 ? '0.35' : '0.45');
+                }});
+            }});
+        }}
+
+        document.querySelectorAll('.legend-item').forEach(function(el) {{
+            el.addEventListener('click', function() {{
+                var fur = el.getAttribute('data-fur');
+                var idx = selected.indexOf(fur);
+                if (idx >= 0) {{
+                    // Don't allow deselecting all
+                    if (selected.length > 1) selected.splice(idx, 1);
+                }} else {{
+                    selected.push(fur);
+                }}
+                updateVisuals();
+                // Push new value into Shiny input 'fur'
+                if (window.parent && window.parent.Shiny) {{
+                    window.parent.Shiny.setInputValue('fur', selected, {{priority: 'event'}});
+                }}
+            }});
+        }});
+    }})();
+    </script>
+    """
+
+    fmap.get_root().html.add_child(folium.Element(legend_html))
     return fmap.get_root().render()
 
-
-initial = load_geojson(DEFAULT_GEOJSON)
-all_shift = sorted(initial["shift"].dropna().unique().tolist())
-all_fur = sorted(initial["primary_fur_color"].dropna().unique().tolist())
-all_age = sorted(initial["age"].dropna().unique().tolist())
-
-_chat_base_df = pd.DataFrame(initial.drop(columns="geometry"))
-_chat_base_df["longitude"] = initial.geometry.x.values
-_chat_base_df["latitude"]  = initial.geometry.y.values
-
-qc = QueryChat(
-    _chat_base_df,
-    "squirrels",
-    client=ChatGithub(model="gpt-4.1"),
-    )
 # ── UI ───────────────────────────────────────────────────────────────────────
 
 app_ui = ui.page_fluid(
@@ -173,12 +206,17 @@ app_ui = ui.page_fluid(
         ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega@5"),
         ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega-lite@5"),
         ui.tags.script(src="https://cdn.jsdelivr.net/npm/vega-embed@6"),
+        ui.tags.script("""
+        Shiny.addCustomMessageHandler("set_fur_filter", function(colors) {
+            Shiny.setInputValue("fur", colors, {priority: "event"});
+        });
+        """),
     ),
     # ── Hero banner ──────────────────────────────────────────────────────────
     ui.tags.div(
         {
             "style": (
-                "position: relative; height: 170px; margin-bottom: 10px; border-radius: 10px; "
+                "position: relative; height: 100px; margin-bottom: 10px; border-radius: 10px; "
                 "overflow: hidden; background-image: "
                 "linear-gradient(to right, rgba(0,0,0,0.65), rgba(0,0,0,0.28)), "
                 "url('/img/squirrels_image.png'); "
@@ -218,24 +256,42 @@ app_ui = ui.page_fluid(
             "🗺️ Map",
 
             ui.layout_sidebar(
+                
+                
 
                 ui.sidebar(
-                    ui.input_selectize("shift", "Shift", choices=all_shift, selected=all_shift, multiple=True),
-                    ui.input_selectize("fur", "Primary Fur Color", choices=all_fur, selected=all_fur, multiple=True),
-                    ui.input_selectize("age", "Age", choices=all_age, selected=all_age, multiple=True),
+                    ui.div(
+                        ui.markdown("""
+                        Discover squirrel sightings from the 2018 Central Park Census.
+                        Use filters to uncover behavioral patterns and spatial hotspots.
+                        """),
+                        style=(
+                            "background-color: #f0f8f4; "
+                            "border-left: 4px solid #6A9E6F; "
+                            "padding: 12px 16px; "
+                            "border-radius: 6px; "
+                            "margin-bottom: 16px; "
+                            "font-size: 14px; "
+                            "line-height: 1.6;"
+                        ),
+                    ),
+                    
+                    ui.input_checkbox_group("shift", "Shift", choices=all_shift, selected=all_shift),
+                    ui.input_checkbox_group("fur", "Primary Fur Color", choices=all_fur, selected=all_fur),
+                    ui.input_checkbox_group("age", "Age", choices=all_age, selected=all_age),
                     ui.input_select(
                         "basemap",
-                        "Basemap",
+                        "Map Theme",
                         choices=["OpenStreetMap", "CartoDB positron", "CartoDB dark_matter"],
                         selected="OpenStreetMap",
                     ),
-                    ui.input_selectize(
-                        "behavior_any",
-                        "Behavior",
-                        choices=[],
-                        selected=[],
-                        multiple=True,
-                    ),
+                    ui.input_checkbox_group(
+                        "behavior_any", 
+                        "Behavior", 
+                        choices={col: col.replace("_", " ").title() for col in BEHAVIOR_COLS}, 
+                        selected=[]
+                        ),
+
                 ),
 
                 ui.div(
@@ -318,54 +374,59 @@ app_ui = ui.page_fluid(
                 ),
             ),
         ),
-
         ui.nav_panel(
             "🤖 AI Analysis",
 
             ui.div(
                 {"style": "display:flex; flex-direction:column; gap:12px; margin-top:10px;"},
 
-                ui.card( # TODO: placeholder for AI
-                    ui.card_header("💬 Ask the AI to filter the data"),
-                    qc.ui(),
-                ),
-
                 ui.div(
-                    {"style": "display:flex; gap:12px;"},
+                    {"style": "display:flex; gap:10px; align-items:stretch; height:700px;"},
 
+                    # Left: chatbot — 1/4 width, scrollable
                     ui.div(
-                        {"style": "flex:1;"},
+                        {"style": "flex:1; min-width:0; display:flex; flex-direction:column;"},
                         ui.card(
-                            ui.card_header("Fur Color Counts"),
-                            ui.output_ui("ai_fur_chart"),
-                            full_screen=True,
+                            ui.card_header("💬 Ask the AI to filter the data"),
+                            ui.div(
+                                {"style": "display:flex; flex-direction:column; height:100%;"},
+                                ui.div(
+                                    {"style": "flex:1; overflow-y:auto; min-height:0;"},
+                                    qc.ui(),
+                                ),
+                            ),
+                            style="height:100%;",
                         ),
                     ),
 
+                    # Right: charts + table — 3/4 width
                     ui.div(
-                        {"style": "flex:1;"},
-                        ui.card(
-                            ui.card_header("Shift Counts"),
-                            ui.output_ui("ai_shift_chart"),
-                            full_screen=True,
+                        {"style": "flex:3; min-width:0; display:flex; flex-direction:column; gap:8px;"},
+
+                        # Charts row
+                        ui.div(
+                            {"style": "display:flex; gap:8px; flex:1;"},
+                            ui.card(
+                                ui.card_header("Fur Color Counts"),
+                                ui.output_ui("ai_fur_chart"),
+                                full_screen=True,
+                                style="flex:1;",
+                            ),
+                            ui.card(
+                                ui.card_header("Shift Counts"),
+                                ui.output_ui("ai_shift_chart"),
+                                full_screen=True,
+                                style="flex:1;",
+                            ),
+                            ui.card(
+                                ui.card_header("Top 5 Behaviors"),
+                                ui.output_ui("ai_behavior_chart"),
+                                full_screen=True,
+                                style="flex:1;",
+                            ),
                         ),
-                    ),
 
-                    ui.div(
-                        {"style": "flex:1;"},
-                        ui.card(
-                            ui.card_header("Top 5 Behaviors"),
-                            ui.output_ui("ai_behavior_chart"),
-                            full_screen=True,
-                        ),
-                    ),
-                ),
-
-                ui.tags.hr(),
-
-                ui.row(
-                    ui.column(
-                        12,
+                        # Data table
                         ui.card(
                             ui.card_header(
                                 ui.div(
@@ -384,55 +445,55 @@ app_ui = ui.page_fluid(
                             ),
                             ui.output_data_frame("ai_table_view"),
                             full_screen=True,
+                            style="flex:2;",
                         ),
                     ),
                 ),
             ),
         ),
-    ),
-)  
-
+    )
+)
 def server(input, output, session):
-    _gdf = reactive.Value(initial)
     qc_vals = qc.server()
 
     # ── Tab 1 outputs and calculations ─────────────────────────────────────────────────
     @reactive.calc
-    def filtered_df() -> gpd.GeoDataFrame:
-        dat = _gdf.get()
-        selected_shift = input.shift() or []
-        selected_fur = input.fur() or []
-        selected_age = input.age() or []
-        selected_behavior = input.behavior_any() or []
+    def filtered_df() -> pd.DataFrame:
+        selected_shift    = list(input.shift()        or [])
+        selected_fur      = list(input.fur()          or [])
+        selected_age      = list(input.age()          or [])
+        selected_behavior = list(input.behavior_any() or [])
 
-        out = dat.copy()
-        
+        conditions = []
         if selected_shift:
-            out = out[out["shift"].isin(selected_shift)]
-        
+            placeholders = ", ".join(f"'{v}'" for v in selected_shift)
+            conditions.append(f"shift IN ({placeholders})")
         if selected_fur:
-            out = out[out["primary_fur_color"].isin(selected_fur)]
-            
+            placeholders = ", ".join(f"'{v}'" for v in selected_fur)
+            conditions.append(f"primary_fur_color IN ({placeholders})")
         if selected_age:
-            out = out[out["age"].isin(selected_age)]
+            placeholders = ", ".join(f"'{v}'" for v in selected_age)
+            conditions.append(f"age IN ({placeholders})")
+        valid_behavior = [c for c in selected_behavior if c in BEHAVIOR_COLS]
+        if valid_behavior:
+            behavior_clause = " OR ".join(f"{c} = TRUE" for c in valid_behavior)
+            conditions.append(f"({behavior_clause})")
+ 
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        query = f"""
+            SELECT
+                unique_squirrel_id, date, shift, age,
+                primary_fur_color, hectare,
+                {', '.join(BEHAVIOR_COLS)}
+            FROM squirrels
+            {where}
+        """
+        return con.execute(query).df()
 
-        if selected_behavior:
-            cols = [c for c in selected_behavior if c in out.columns]
-            if cols:
-                mask = pd.Series(False, index=out.index)
-                for c in cols:
-                    mask = mask | out[c].fillna(False)
-                out = out[mask]
-
-        return out
-
-    @reactive.effect
-    def _update_filter_choices():
-        df = _gdf.get()
-        behavior_cols = [c for c in BEHAVIOR_COLS if c in df.columns]
-        current = input.behavior_any() or []
-        selected = [v for v in current if v in behavior_cols]
-        ui.update_selectize("behavior_any", choices=behavior_cols, selected=selected, session=session)
+    @reactive.calc
+    def filtered_gdf() -> gpd.GeoDataFrame:
+        ids = set(filtered_df()["unique_squirrel_id"])
+        return _gdf[_gdf["unique_squirrel_id"].isin(ids)]
 
     @output
     @render.text
@@ -442,11 +503,15 @@ def server(input, output, session):
     @output
     @render.ui
     def map_view():
-        html_str = map_html(filtered_df(), input.basemap())
+        html_str = map_html(filtered_gdf(), input.basemap(), list(input.fur()))
         return ui.tags.iframe(
             srcdoc=html_str,
             style="height: 100%; min-height: 480px; width: 100%; border: 0;",
         )
+    
+    @reactive.effect
+    def _sync_fur_checkbox():
+        ui.update_checkbox_group("fur", selected=list(input.fur()))
 
     @output
     @render.ui
@@ -467,7 +532,7 @@ def server(input, output, session):
                     legend=None,
                 ),
             )
-            .properties(height=60, width=220)
+            .properties(height=60, width="container")
         )
         return chart_html(chart, element_id="fur_color_hist_chart")
 
@@ -490,7 +555,7 @@ def server(input, output, session):
                     legend=None,
                 ),
             )
-            .properties(height=60, width=220)
+            .properties(height=60, width="container")
         )
         return chart_html(chart, element_id="shift_hist_chart")
 
@@ -522,7 +587,7 @@ def server(input, output, session):
                 y=alt.Y("behavior:N", title="Behavior", sort="-x"),
                 color=alt.value(BEHAVIOUR_COLOUR),
             )
-            .properties(height=60, width=220)
+            .properties(height=60, width="container")
         )
 
         return chart_html(chart, element_id="behavior_hist_chart")
@@ -534,11 +599,9 @@ def server(input, output, session):
         if df.empty:
             return render.DataGrid(pd.DataFrame({"message": ["No rows for current filters"]}))
 
-        df["longitude"] = df.geometry.x
-        df["latitude"] = df.geometry.y
         cols = [
             "unique_squirrel_id",
-            "date_clean",
+            "date",
             "shift",
             "age",
             "primary_fur_color",
@@ -552,12 +615,7 @@ def server(input, output, session):
 
     @render.download(filename="squirrel_report.csv")
     def download_csv():
-        df_to_save = filtered_df().copy()
-
-        if "geometry" in df_to_save.columns:
-            df_to_save = pd.DataFrame(df_to_save.drop(columns="geometry"))
-    
-        yield df_to_save.to_csv(index=False)
+        yield filtered_df().to_csv(index=False)
 
     # ── Tab 2 outputs: charts ─────────────────────────────────────────────────
     @output
@@ -571,7 +629,7 @@ def server(input, output, session):
 
     @output
     @render.ui
-    def ai_fur_chart(): # PROOF
+    def ai_fur_chart(): 
         df = pd.DataFrame(qc_vals.df())  # uses querychat df
         if df.empty or "primary_fur_color" not in df.columns:
             return ui.em("No data.")
@@ -587,7 +645,7 @@ def server(input, output, session):
                     legend=None),
                 tooltip=[alt.Tooltip("primary_fur_color:N", title="Fur Color"), alt.Tooltip("count():Q", title="Count")],
             )
-            .properties(height=160, width="container")
+            .properties(height=100, width="container")
         )
         return chart_html(chart, element_id="ai_fur_chart")
     
@@ -606,7 +664,7 @@ def server(input, output, session):
                 color=alt.Color("shift:N", scale=alt.Scale(domain=SHIFT_ORDER, range=SHIFT_COLOURS), legend=None),
                 tooltip=[alt.Tooltip("shift:N", title="Shift"), alt.Tooltip("count():Q", title="Count")],
             )
-            .properties(height=160, width="container")
+            .properties(height=100, width="container")
         )
         return chart_html(chart, element_id="ai_shift_chart")
     
@@ -631,7 +689,7 @@ def server(input, output, session):
                 y=alt.Y("behavior:N", title="Behavior", sort="-x"),
                 color=alt.value(BEHAVIOUR_COLOUR),
             )
-            .properties(height=150, width=240)
+            .properties(height=100, width="container")
         )
         return chart_html(chart, element_id="ai_behavior_chart_elem")
     # ── Tab 2: filtered data table ────────────────────────────────────────────
