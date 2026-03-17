@@ -254,8 +254,16 @@ app_ui = ui.page_fluid(
             "🗺️ Map",
 
             ui.layout_sidebar(
+                
+                
+
 
                 ui.sidebar(
+                    ui.markdown("""
+                    This dashboard allows you to explore squirrel sightings from the 2018 Census.
+                    Filter by behavior, fur color, age, and shift to discover patterns.
+                    """),
+                    
                     ui.input_checkbox_group("shift", "Shift", choices=all_shift, selected=all_shift),
                     ui.input_checkbox_group("fur", "Primary Fur Color", choices=all_fur, selected=all_fur),
                     ui.input_checkbox_group("age", "Age", choices=all_age, selected=all_age),
@@ -442,8 +450,9 @@ def server(input, output, session):
         selected_shift    = list(input.shift()        or [])
         selected_fur      = list(input.fur()          or [])
         selected_age      = list(input.age()          or [])
-        #selected_behavior = list(input.behavior_any() or [])
-        selected_behavior = list(reactive.isolate(input.behavior_any) or [])
+        
+        with reactive.isolate():
+            selected_behavior = list(input.behavior_any() or [])
 
 
         conditions = []
