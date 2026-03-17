@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [0.5.0] - 2026-03-16
+## [0.4.0] - 2026-03-17
 
 ### Added
 
@@ -34,11 +34,15 @@ All notable changes to this project are documented in this file.
 
 -   AI tab UI redesigned with chat feature as a fixed-height scrollable left sidebar (#96)
 
--   Refactored Logic: Moved `color_for_fur` and `color_for_shift` functions from `app.py` into a modular `src/utils.py` for testing.
+-   Moved `color_for_fur` and `color_for_shift` functions from `app.py` into a modular `src/utils.py` for testing (#127)
 
--   Folder Restructuring: Organized the project by moving all source code (`app.py`, `utils.py`, `data_processing.py`) into a `src/` directory.
+-   Organized the project by moving all source code (`app.py`, `utils.py`, `data_processing.py`) into a `src/` directory (#127)
 
--   Data Imputation: Updated data loading to replace "?" values with "Unknown" in the age category to clean up UI filters.
+-   Added tests folder with 2 tests files with conftest and utils (#127)
+
+-   Updated test-related content in requirements.txt, readme file, and changelog accordingly (#127)
+
+-   Fixed the src/ path issues when republishing (#129)
 
 ### Fixed
 
@@ -50,7 +54,7 @@ All notable changes to this project are documented in this file.
 -   **Tests:** #82
 
 ### Known Issues
--   Automated tests require manual execution of `playwright install` in new environments before the browser engines can launch.
+
 -   <!-- Anything incomplete or broken TAs should be aware of (so it isn't mistaken for unfinished work). -->
 
 ### Release Highlight: [Component Click Event Interaction]
@@ -66,9 +70,9 @@ All notable changes to this project are documented in this file.
 
 <!-- Summary of workflow or collaboration improvements made since M3. -->
 
--   **CONTRIBUTING.md:** <!-- Link to the PR that updated it with your M3 retrospective and M4 norms. -->
--   **M3 retrospective:** <!-- What changed in your workflow after M3 collaboration feedback. -->
--   **M4:** <!-- What you tried or improved this milestone. -->
+-   **CONTRIBUTING.md:** Updated via PR (#131) to include our Milestone 3 retrospective and formalize our new collaboration norms for testing, documentation, and ownership.
+-   **M3 retrospective:** We successfully transitioned from a static dashboard to a complex, AI-integrated product by utilizing parallel development tracks for the Map UI and the AI Analysis tab. 
+-   **M4:** In Milestone 4, we pivoted toward production stability by optimizing data performance with a Parquet and DuckDB backend and resolving critical map rendering latencies. The user experience was refined through a scrollable AI sidebar, intuitive basemap selectors, and data imputation for cleaner UI filters. To secure the codebase, a testing suite was established, and the workflow matured by managing all tasks through prioritized GitHub Issues and atomic, peer-reviewed pull requests.
 
 ### Reflection
 
