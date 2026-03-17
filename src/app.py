@@ -259,10 +259,23 @@ app_ui = ui.page_fluid(
 
 
                 ui.sidebar(
-                    ui.markdown("""
-                    This dashboard allows you to explore squirrel sightings from the 2018 Census.
-                    Filter by behavior, fur color, age, and shift to discover patterns.
-                    """),
+                    ui.div(
+                        ui.markdown("""
+                        **🐿️ Explore the Data**
+                        
+                        Discover squirrel sightings from the 2018 Central Park Census.
+                        Use filters to uncover behavioral patterns and spatial hotspots.
+                        """),
+                        style=(
+                            "background-color: #f0f8f4; "
+                            "border-left: 4px solid #6A9E6F; "
+                            "padding: 12px 16px; "
+                            "border-radius: 6px; "
+                            "margin-bottom: 16px; "
+                            "font-size: 14px; "
+                            "line-height: 1.6;"
+                        ),
+                    ),
                     
                     ui.input_checkbox_group("shift", "Shift", choices=all_shift, selected=all_shift),
                     ui.input_checkbox_group("fur", "Primary Fur Color", choices=all_fur, selected=all_fur),

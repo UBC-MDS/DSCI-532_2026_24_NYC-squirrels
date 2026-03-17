@@ -84,9 +84,9 @@ def process_geojson(
         if col not in gdf.columns:
             gdf[col] = False
         gdf[col] = to_bool(gdf[col])
-    # Fill nulls in categorical columns
+    # Fill nulls and replace '?' in categorical columns
     for col in ("shift", "primary_fur_color", "age"):
-        gdf[col] = gdf[col].fillna("Unknown")
+        gdf[col] = gdf[col].fillna("Unknown").replace("?", "Unknown")
     # Parse date — store as ISO string so GeoJSON serialises cleanly
     gdf["date_clean"] = (
         pd.to_datetime(gdf["date"].astype(str), format="%m%d%Y", errors="coerce")
@@ -137,10 +137,10 @@ def process_csv(
     for col in BEHAVIOR_COLS:
         if col in squirrels.columns:
             squirrels[col] = to_bool(squirrels[col])
-    # Fill nulls in key categorical columns
+    # Fill nulls and replace '?' in key categorical columns
     for col in ("shift", "primary_fur_color", "age"):
         if col in squirrels.columns:
-            squirrels[col] = squirrels[col].fillna("Unknown")
+            squirrels[col] = squirrels[col].fillna("Unknown").replace("?", "Unknown")
     
     Path(dst_csv).parent.mkdir(parents=True, exist_ok=True)
     # save to csv
