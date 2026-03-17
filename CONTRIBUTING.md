@@ -91,6 +91,24 @@ For larger datasets or more computationally intensive workflows, we would also c
 
 These tools and practices would improve maintainability, reliability, and collaboration as the project grows.
 
+## Milestone Retrospectives and Norms
+
+### Milestone 3 Retrospective
+* **What worked:** Our team successfully transitioned from a static dashboard to a complex, AI-integrated product by utilizing parallel development tracks for the Map UI and the AI Analysis tab.
+* **What didn't work(Environment):** We initially relied on a `environment.yml` file, but realized that Conda environments were inconsistent across different operating systems, this might lead to errors during local testing and deployment.
+* **What didn't work (Deployment):** We faced multiple failures when republishing to Posit Connect Cloud because of the Token and permission restrictions for the GitHub Models.
+* **Improvement:** We have pivoted to a `requirements.txt` workflow and updated the permission for models to ensure all environment variables are set before pushing to production.
+
+### Milestone 4 Collaboration Norms
+To ensure a high-quality production release, our team is committing to the following norms for M4:
+1. **Environment Standardization:** To ensure the project is "runnable with a single command," we have moved to a unified dependency management system that guarantees parity between local development and cloud production.
+
+2. **Quality Assurance (QA):** We are now enforcing a strict testing-first policy where Playwright and Pytest suites must pass before any feature is merged into the main branch.
+
+3. **Design-Before-Code:** We have committed to a "Documentation First" workflow, ensuring that specification documents and PR descriptions explain intent and design logic before any implementation begins.
+
+4. **Distributed Ownership:** To prevent single-contributor bottlenecks, we have distributed feedback resolution and code reviews equally across the team, ensuring everyone touches both the source code and the documentation.
+
 ## Code of conduct
 
 By contributing to this project, you are agreeing to abide by our Code of Conduct, which can be found here [Code of Conduct](https://github.com/UBC-MDS/DSCI-532_2026_24_NYC-squirrels/blob/main/CODE_OF_CONDUCT.md).
