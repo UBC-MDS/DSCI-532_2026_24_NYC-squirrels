@@ -1,4 +1,5 @@
 from __future__ import annotations
+from utils import color_for_fur, color_for_shift
 
 import html
 import json
@@ -59,23 +60,6 @@ qc = QueryChat(
 )
 
 # ── Presentation helpers ──────────────────────────────────────────────────────
-
-def color_for_fur(fur: str) -> str:
-    palette = {
-        "Gray": "#808080",
-        "Cinnamon": "#B87333",
-        "Black": "#1F1F1F",
-        "Unknown": "#4AA3DF",
-    }
-    return palette.get(fur, "#6E8BAA")
-
-
-def color_for_shift(shift: str) -> str:
-    palette = {
-        "AM": "#D9C27A",
-        "PM": "#5B87D9"
-    }
-    return palette.get(shift, "#A0A0A0")
 
 
 def chart_html(chart: alt.Chart, element_id: str) -> ui.Tag:
