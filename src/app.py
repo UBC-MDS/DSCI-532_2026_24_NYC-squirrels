@@ -452,10 +452,7 @@ def server(input, output, session):
         selected_shift    = list(input.shift()        or [])
         selected_fur      = list(input.fur()          or [])
         selected_age      = list(input.age()          or [])
-        
-        with reactive.isolate():
-            selected_behavior = list(input.behavior_any() or [])
-
+        selected_behavior = list(input.behavior_any() or [])
 
         conditions = []
         if selected_shift:
