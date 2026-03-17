@@ -82,6 +82,24 @@ shiny run src/app.py
 
 The app will be available at `http://localhost:xxxx`
 
+### Running Tests
+This project uses pytest for unit testing logic and Playwright for verifying dashboard behaviors.
+
+1. Install testing tools:
+Ensure you have the browser engines installed after setting up your environment:
+
+```bash
+pip install pytest-playwright
+playwright install
+```
+
+2. Run all tests:
+You can run the entire suite with a single command from the project root:
+
+```bash
+pytest tests/
+```
+
 ### Contribution guide
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow, branch strategy,

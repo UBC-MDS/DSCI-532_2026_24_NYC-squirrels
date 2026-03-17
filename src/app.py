@@ -1,5 +1,5 @@
 from __future__ import annotations
-from utils import color_for_fur, color_for_shift
+from src.utils import color_for_fur, color_for_shift
 
 import html
 import json
@@ -57,6 +57,7 @@ qc = QueryChat(
     _chat_base_df,
     "squirrels",
     client=ChatGithub(model="gpt-4.1"),
+    greeting="Hello! How can I help you analyze the squirrels?"
 )
 
 # ── Presentation helpers ──────────────────────────────────────────────────────
