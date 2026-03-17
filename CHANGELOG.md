@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [0.5.0] - 2026-03-17
+## [0.5.0] - 2026-03-16
 
 ### Added
 
@@ -10,7 +10,10 @@ All notable changes to this project are documented in this file.
 - Total squirrel count display below fur color legend on map
 - Updated README with clear setup and usage instructions including OpenAI API configuration
 - Clickable map legend that allows for fur colour selection and updates outputs (as well as checkboxes) [PR #...]
-
+- Automated testing suite in `tests/` featuring 4 Playwright behavior tests and 1 pytest unit test.
+- Integration tests in `tests/test_app.py` to verify data synchronization between the map legend and data table footer.
+- AI Tab stability test to ensure the chat interface and navigation load correctly.
+- Unit tests in `tests/test_utils.py` for isolated verification of color-mapping functions.
 -   <!-- New features, components, tests - one line each. Reference PRs where relevant (e.g. #12). -->
 
 ### Changed
@@ -31,6 +34,12 @@ All notable changes to this project are documented in this file.
 
 -   AI tab UI redesigned with chat feature as a fixed-height scrollable left sidebar (#96)
 
+-   Refactored Logic: Moved `color_for_fur` and `color_for_shift` functions from `app.py` into a modular `src/utils.py` for testing.
+
+-   Folder Restructuring: Organized the project by moving all source code (`app.py`, `utils.py`, `data_processing.py`) into a `src/` directory.
+
+-   Data Imputation: Updated data loading to replace "?" values with "Unknown" in the age category to clean up UI filters.
+
 ### Fixed
 
 -   <!-- Bugs resolved since M3. -->
@@ -38,8 +47,10 @@ All notable changes to this project are documented in this file.
 
 -   **Feedback prioritization issue link:** #88
 
-### Known Issues
+-   **Tests:** #82
 
+### Known Issues
+-   Automated tests require manual execution of `playwright install` in new environments before the browser engines can launch.
 -   <!-- Anything incomplete or broken TAs should be aware of (so it isn't mistaken for unfinished work). -->
 
 ### Release Highlight: [Component Click Event Interaction]
