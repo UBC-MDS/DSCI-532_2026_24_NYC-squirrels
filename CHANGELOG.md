@@ -6,15 +6,21 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
-- Project description with styled background in sidebar for improved user onboarding
-- Total squirrel count display below fur color legend on map
-- Updated README with clear setup and usage instructions including OpenAI API configuration
-- Clickable map legend that allows for fur colour selection and updates outputs (as well as checkboxes)
-- Automated testing suite in `tests/` featuring 4 Playwright behavior tests and 1 pytest unit test.
-- Integration tests in `tests/test_app.py` to verify data synchronization between the map legend and data table footer.
-- AI Tab stability test to ensure the chat interface and navigation load correctly.
-- Unit tests in `tests/test_utils.py` for isolated verification of color-mapping functions.
--   <!-- New features, components, tests - one line each. Reference PRs where relevant (e.g. #12). -->
+-   Project description with styled background in sidebar for improved user onboarding
+
+-   Total squirrel count display below fur color legend on map
+
+-   Updated README with clear setup and usage instructions including OpenAI API configuration
+
+-   Clickable map legend that allows for fur colour selection and updates outputs (as well as checkboxes)
+
+-   Automated testing suite in `tests/` featuring 4 Playwright behavior tests and 1 pytest unit test.
+
+-   Integration tests in `tests/test_app.py` to verify data synchronization between the map legend and data table footer.
+
+-   AI Tab stability test to ensure the chat interface and navigation load correctly.
+
+-   Unit tests in `tests/test_utils.py` for isolated verification of color-mapping functions.
 
 ### Changed
 
@@ -46,7 +52,6 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
--   <!-- Bugs resolved since M3. -->
 - Fixed infinite loop on behavior filter by wrapping input read in `reactive.isolate()` context manager
 
 -   **Feedback prioritization issue link:** #88
@@ -55,11 +60,10 @@ All notable changes to this project are documented in this file.
 
 ### Known Issues
 
--   <!-- Anything incomplete or broken TAs should be aware of (so it isn't mistaken for unfinished work). -->
+- None
 
 ### Release Highlight: [Component Click Event Interaction]
 
-<!-- One short paragraph describing what you built and what it does for the user. -->
 We built a clickable legend for the map component of the dashboard. All outputs in the dashboard react to this component, and checkboxes are also updated to remain aligned with the legend. The component filters the squirrels by fur colour, and makes the key takeaway of the map a little more intuitive to use, and thus infer from.
 
 -   **Option chosen:** D
@@ -68,8 +72,6 @@ We built a clickable legend for the map component of the dashboard. All outputs 
 -   **Feature prioritization issue link:** #113
 
 ### Collaboration
-
-<!-- Summary of workflow or collaboration improvements made since M3. -->
 
 -   **CONTRIBUTING.md:** Updated via PR (#131) to include our Milestone 3 retrospective and formalize our new collaboration norms for testing, documentation, and ownership.
 -   **M3 retrospective:** We successfully transitioned from a static dashboard to a complex, AI-integrated product by utilizing parallel development tracks for the Map UI and the AI Analysis tab. 
@@ -82,7 +84,9 @@ We built a clickable legend for the map component of the dashboard. All outputs 
      any intentional deviations from DSCI 531 visualization best practices. -->
 ```
 
-<!-- Trade-offs: one sentence on feedback prioritization - full rationale is in #<issue> and ### Changed above. -->
+Generally, we prioritised feedback that either critically improved the functional capabilities of our dashboard, or represented necessary visual improvements which made our app more intuitive to use. Overall, the changes made to the dashboard over the last few weeks have made it attractive, easy to use, and functional. Perhaps the biggest success of the dashboard is the interactive map which serves as the centre piece. As such, we found Lecture 3 of DSCI 532 (Geospatial Visualisation) to be extremely useful in working with GeoJSON data and creating maps with Altair.
+
+However, the map also represents our biggest limitation. One of our intentions when beginning to plan the project was to be able to divide the map into chunks. In this way, we could help our users narrow down which areas of the park they would be most likely to find squirrels in. While this didn't come to fruition, we believe that users are still able to do so, but with slightly more effort. Another struggle that we had throughout the project was the latency of some of our outputs. For this reason, we believe it would have been very helpful to spend more time discussing strategies for mitigating laggy components in class.
 
 ```{=html}
 <!-- Most useful: which lecture, material, or feedback shaped your work most this milestone,
