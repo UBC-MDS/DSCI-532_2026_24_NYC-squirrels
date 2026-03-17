@@ -16,17 +16,15 @@ All notable changes to this project are documented in this file.
 
 -   DuckDB and Parquet implemented into `app.py`
 
--   Addressed: Use checkboxed rather than selectize for filters (#...)
+-   Use checkboxed rather than selectize for filters (#120)
 
--   Addressed: Convert the behaviour filter to multi-select pill like the other filters (#...)
+-   Convert the behaviour filter to multi-select pill like the other filters (#120)
 
--   Addressed: Make the basemap selector more intuitive (#...)
+-   Make the basemap selector more intuitive (#120)
 
--   Addressed: Adjust chart width to remove whitespace (#...)
+-   Adjust chart width to remove whitespace (#120)
 
--   <!-- Spec or design deviations, and motivation. -->
-
--   <!-- Feedback items you addressed: "Addressed: <item description> (#<prioritization issue>) via #<PR>" -->
+-   AI tab UI redesigned with chat feature as a fixed-height scrollable left sidebar (#96)
 
 ### Fixed
 

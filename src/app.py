@@ -11,13 +11,11 @@ from chatlas import ChatGithub
 from dotenv import load_dotenv
 from querychat import QueryChat
 from shiny import App, reactive, render, ui
-import duckdb
 import geopandas as gpd
+import duckdb
 
 from data_processing import (
     BEHAVIOR_COLS,
-    OUT_GEOJSON,
-    OUT_PAR,
     load_geojson,
     to_flat_df,
 )
@@ -35,13 +33,20 @@ AGE_COLOURS = ["#E07B54", "#7BB8E0", "#A0A0A0"]
 
 APP_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = APP_DIR.parent
+
 load_dotenv(PROJECT_ROOT / ".env")
+
+OUT_PAR = PROJECT_ROOT / "data" / "processed" / "squirrels.parquet"
+OUT_GEOJSON = PROJECT_ROOT / "data" / "processed" / "squirrels_clean.geojson"
+
 con = duckdb.connect()
-con.execute(f"CREATE VIEW squirrels AS SELECT * FROM read_parquet('{OUT_PAR}')")
+con.execute(
+    f"CREATE VIEW squirrels AS SELECT * FROM read_parquet('{OUT_PAR.as_posix()}')"
+)
 
 # ── Bootstrap: load already-cleaned processed GeoJSON ────────────────────────
 
-_gdf     = load_geojson(PROJECT_ROOT / OUT_GEOJSON)
+_gdf     = load_geojson(OUT_GEOJSON)
 all_shift = con.execute("SELECT DISTINCT shift FROM squirrels ORDER BY shift").df()["shift"].tolist()
 all_fur   = con.execute("SELECT DISTINCT primary_fur_color FROM squirrels ORDER BY primary_fur_color").df()["primary_fur_color"].tolist()
 all_age   = con.execute("SELECT DISTINCT age FROM squirrels ORDER BY age").df()["age"].tolist()
@@ -209,7 +214,7 @@ app_ui = ui.page_fluid(
     ui.tags.div(
         {
             "style": (
-                "position: relative; height: 170px; margin-bottom: 10px; border-radius: 10px; "
+                "position: relative; height: 100px; margin-bottom: 10px; border-radius: 10px; "
                 "overflow: hidden; background-image: "
                 "linear-gradient(to right, rgba(0,0,0,0.65), rgba(0,0,0,0.28)), "
                 "url('/img/squirrels_image.png'); "
@@ -349,54 +354,59 @@ app_ui = ui.page_fluid(
                 ),
             ),
         ),
-
         ui.nav_panel(
             "🤖 AI Analysis",
 
             ui.div(
                 {"style": "display:flex; flex-direction:column; gap:12px; margin-top:10px;"},
 
-                ui.card( # TODO: placeholder for AI
-                    ui.card_header("💬 Ask the AI to filter the data"),
-                    qc.ui(),
-                ),
-
                 ui.div(
-                    {"style": "display:flex; gap:12px;"},
+                    {"style": "display:flex; gap:10px; align-items:stretch; height:700px;"},
 
+                    # Left: chatbot — 1/4 width, scrollable
                     ui.div(
-                        {"style": "flex:1;"},
+                        {"style": "flex:1; min-width:0; display:flex; flex-direction:column;"},
                         ui.card(
-                            ui.card_header("Fur Color Counts"),
-                            ui.output_ui("ai_fur_chart"),
-                            full_screen=True,
+                            ui.card_header("💬 Ask the AI to filter the data"),
+                            ui.div(
+                                {"style": "display:flex; flex-direction:column; height:100%;"},
+                                ui.div(
+                                    {"style": "flex:1; overflow-y:auto; min-height:0;"},
+                                    qc.ui(),
+                                ),
+                            ),
+                            style="height:100%;",
                         ),
                     ),
 
+                    # Right: charts + table — 3/4 width
                     ui.div(
-                        {"style": "flex:1;"},
-                        ui.card(
-                            ui.card_header("Shift Counts"),
-                            ui.output_ui("ai_shift_chart"),
-                            full_screen=True,
+                        {"style": "flex:3; min-width:0; display:flex; flex-direction:column; gap:8px;"},
+
+                        # Charts row
+                        ui.div(
+                            {"style": "display:flex; gap:8px; flex:1;"},
+                            ui.card(
+                                ui.card_header("Fur Color Counts"),
+                                ui.output_ui("ai_fur_chart"),
+                                full_screen=True,
+                                style="flex:1;",
+                            ),
+                            ui.card(
+                                ui.card_header("Shift Counts"),
+                                ui.output_ui("ai_shift_chart"),
+                                full_screen=True,
+                                style="flex:1;",
+                            ),
+                            ui.card(
+                                ui.card_header("Top 5 Behaviors"),
+                                ui.output_ui("ai_behavior_chart"),
+                                full_screen=True,
+                                style="flex:1;",
+                            ),
                         ),
-                    ),
 
-                    ui.div(
-                        {"style": "flex:1;"},
-                        ui.card(
-                            ui.card_header("Top 5 Behaviors"),
-                            ui.output_ui("ai_behavior_chart"),
-                            full_screen=True,
-                        ),
-                    ),
-                ),
-
-                ui.tags.hr(),
-
-                ui.row(
-                    ui.column(
-                        12,
+                        # Data table
                         ui.card(
                             ui.card_header(
                                 ui.div(
@@ -415,14 +425,14 @@ app_ui = ui.page_fluid(
                             ),
                             ui.output_data_frame("ai_table_view"),
                             full_screen=True,
+                            style="flex:2;",
                         ),
                     ),
                 ),
             ),
         ),
-    ),
-)  
-
+    )
+)
 def server(input, output, session):
     qc_vals = qc.server()
 
@@ -448,7 +458,7 @@ def server(input, output, session):
         if valid_behavior:
             behavior_clause = " OR ".join(f"{c} = TRUE" for c in valid_behavior)
             conditions.append(f"({behavior_clause})")
-
+ 
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         query = f"""
             SELECT
@@ -599,7 +609,7 @@ def server(input, output, session):
 
     @output
     @render.ui
-    def ai_fur_chart(): # PROOF
+    def ai_fur_chart(): 
         df = pd.DataFrame(qc_vals.df())  # uses querychat df
         if df.empty or "primary_fur_color" not in df.columns:
             return ui.em("No data.")
@@ -615,7 +625,7 @@ def server(input, output, session):
                     legend=None),
                 tooltip=[alt.Tooltip("primary_fur_color:N", title="Fur Color"), alt.Tooltip("count():Q", title="Count")],
             )
-            .properties(height=160, width="container")
+            .properties(height=100, width="container")
         )
         return chart_html(chart, element_id="ai_fur_chart")
     
@@ -634,7 +644,7 @@ def server(input, output, session):
                 color=alt.Color("shift:N", scale=alt.Scale(domain=SHIFT_ORDER, range=SHIFT_COLOURS), legend=None),
                 tooltip=[alt.Tooltip("shift:N", title="Shift"), alt.Tooltip("count():Q", title="Count")],
             )
-            .properties(height=160, width="container")
+            .properties(height=100, width="container")
         )
         return chart_html(chart, element_id="ai_shift_chart")
     
@@ -659,7 +669,7 @@ def server(input, output, session):
                 y=alt.Y("behavior:N", title="Behavior", sort="-x"),
                 color=alt.value(BEHAVIOUR_COLOUR),
             )
-            .properties(height=160, width="container")
+            .properties(height=100, width="container")
         )
         return chart_html(chart, element_id="ai_behavior_chart_elem")
     # ── Tab 2: filtered data table ────────────────────────────────────────────
