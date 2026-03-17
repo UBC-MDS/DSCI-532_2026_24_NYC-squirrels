@@ -9,7 +9,7 @@ All notable changes to this project are documented in this file.
 - Project description with styled background in sidebar for improved user onboarding
 - Total squirrel count display below fur color legend on map
 - Updated README with clear setup and usage instructions including OpenAI API configuration
-- Clickable map legend that allows for fur colour selection and updates outputs (as well as checkboxes) [PR #...]
+- Clickable map legend that allows for fur colour selection and updates outputs (as well as checkboxes)
 - Automated testing suite in `tests/` featuring 4 Playwright behavior tests and 1 pytest unit test.
 - Integration tests in `tests/test_app.py` to verify data synchronization between the map legend and data table footer.
 - AI Tab stability test to ensure the chat interface and navigation load correctly.
@@ -18,7 +18,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
-- Enhanced sidebar user information box with gradient background and visual styling
+-   Enhanced sidebar user information box with gradient background and visual styling
 
 -   Data cleaning moved from `eda.ipynb` and `app.py` to new `data_processing.py` script to improve read
 
@@ -60,9 +60,10 @@ All notable changes to this project are documented in this file.
 ### Release Highlight: [Component Click Event Interaction]
 
 <!-- One short paragraph describing what you built and what it does for the user. -->
+We built a clickable legend for the map component of the dashboard. All outputs in the dashboard react to this component, and checkboxes are also updated to remain aligned with the legend. The component filters the squirrels by fur colour, and makes the key takeaway of the map a little more intuitive to use, and thus infer from.
 
 -   **Option chosen:** D
--   **PR:** #...
+-   **PR:** #125
 -   **Why this option over the others:** As our Querychat has performed well thus far, we opted to add a component click event interaction to make our map feel more interactive. We chose this path over LLM logging as we feel the map is the cornerstone of our dashboard, and improving it provides more value to its users.
 -   **Feature prioritization issue link:** #113
 

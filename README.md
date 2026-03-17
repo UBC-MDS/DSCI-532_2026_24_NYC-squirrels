@@ -1,9 +1,3 @@
----
-editor_options: 
-  markdown: 
-    wrap: 72
----
-
 # DSCI-532_2026_24_NYC-squirrels
 
 ## Project Summary
