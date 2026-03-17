@@ -45,17 +45,42 @@ seen and how patterns differ by fur color, age, and shift.
 [![Watch dashboard
 demo](img/demo.png)](https://github.com/UBC-MDS/DSCI-532_2026_24_NYC-squirrels/blob/main/img/demo.mp4)
 
+### Using the Dashboard
+
+1. **Use filters** (left sidebar) to select specific squirrel traits
+2. **Explore the map** to see spatial distributions
+3. **Review charts** (right side) for patterns in fur color, shifts, and behaviors
+4. **Ask questions** in the Chat tab for AI-powered natural language queries
+
 ## For Contributors
 
 ### Install dependencies and run locally
+
+1. **Clone and set up the environment:**
 
 ``` bash
 conda env create -f environment.yml
 conda activate squirrels
 pip install -r requirements.txt
+```
+
+2. **(Optional) Configure AI features:**
+
+Create a `.env` file in the project root and add your OpenAI API key:
+
+``` bash
+cp .env.example .env
+# Edit .env and add your OPENAI_API_KEY
+```
+
+3. **Run the application:**
+
+``` bash
 python src/data_processing.py
 shiny run src/app.py
 ```
+
+The app will be available at `http://localhost:xxxx`
 
 ### Contribution guide
 

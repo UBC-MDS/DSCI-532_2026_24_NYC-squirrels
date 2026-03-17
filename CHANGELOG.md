@@ -2,15 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
-## [0.4.0] - 2025-03-17
+## [0.5.0] - 2026-03-17
 
 ### Added
 
+- Project description with styled background in sidebar for improved user onboarding
+- Total squirrel count display below fur color legend on map
+- Updated README with clear setup and usage instructions including OpenAI API configuration
 - Clickable map legend that allows for fur colour selection and updates outputs (as well as checkboxes) [PR #...]
 
 -   <!-- New features, components, tests - one line each. Reference PRs where relevant (e.g. #12). -->
 
 ### Changed
+
+- Enhanced sidebar user information box with gradient background and visual styling
 
 -   Data cleaning moved from `eda.ipynb` and `app.py` to new `data_processing.py` script to improve read
 
@@ -29,6 +34,7 @@ All notable changes to this project are documented in this file.
 ### Fixed
 
 -   <!-- Bugs resolved since M3. -->
+- Fixed infinite loop on behavior filter by wrapping input read in `reactive.isolate()` context manager
 
 -   **Feedback prioritization issue link:** #88
 

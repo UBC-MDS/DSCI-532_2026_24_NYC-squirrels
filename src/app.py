@@ -146,6 +146,8 @@ def map_html(filtered, tile_choice: str, selected_fur: list) -> str:
         for name, color in fur_palette.items()
     )
 
+    total_squirrels = len(filtered)
+    
     legend_html = f"""
     <div id="fur-legend"
          style="position:absolute; top:12px; right:12px; z-index:9999;
@@ -155,6 +157,11 @@ def map_html(filtered, tile_choice: str, selected_fur: list) -> str:
         <div style="font-size:11px; font-weight:700; color:#444;
                     margin-bottom:5px; letter-spacing:0.04em;">FUR COLOR</div>
         {legend_items_html}
+        
+        <div style="border-top:1px solid rgba(0,0,0,0.1); margin-top:8px; padding-top:8px;">
+            <div style="font-size:11px; color:#666; margin-bottom:2px;">Total Squirrels</div>
+            <div style="font-size:18px; font-weight:700; color:#6A9E6F;">{total_squirrels:,}</div>
+        </div>
     </div>
 
     <script>
@@ -254,8 +261,26 @@ app_ui = ui.page_fluid(
             "🗺️ Map",
 
             ui.layout_sidebar(
+                
+                
 
                 ui.sidebar(
+                    ui.div(
+                        ui.markdown("""
+                        Discover squirrel sightings from the 2018 Central Park Census.
+                        Use filters to uncover behavioral patterns and spatial hotspots.
+                        """),
+                        style=(
+                            "background-color: #f0f8f4; "
+                            "border-left: 4px solid #6A9E6F; "
+                            "padding: 12px 16px; "
+                            "border-radius: 6px; "
+                            "margin-bottom: 16px; "
+                            "font-size: 14px; "
+                            "line-height: 1.6;"
+                        ),
+                    ),
+                    
                     ui.input_checkbox_group("shift", "Shift", choices=all_shift, selected=all_shift),
                     ui.input_checkbox_group("fur", "Primary Fur Color", choices=all_fur, selected=all_fur),
                     ui.input_checkbox_group("age", "Age", choices=all_age, selected=all_age),
@@ -442,7 +467,10 @@ def server(input, output, session):
         selected_shift    = list(input.shift()        or [])
         selected_fur      = list(input.fur()          or [])
         selected_age      = list(input.age()          or [])
-        selected_behavior = list(input.behavior_any() or [])
+        
+        with reactive.isolate():
+            selected_behavior = list(input.behavior_any() or [])
+
 
         conditions = []
         if selected_shift:
